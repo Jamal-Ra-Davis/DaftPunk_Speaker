@@ -32,12 +32,12 @@ struct fft_double_buffer {
 
 BluetoothA2DPSink a2dp_sink;
 CRGBArray<1> rgb_led;
-volatile bool data_ready = false;
 float fft_output[FFT_N];
 float fft_input[FFT_N];
 struct fft_double_buffer fft_buf;
 fft_config_t *real_fft_plan;
 int ranges[16] = {20, 32, 51, 82, 131, 210, 336, 536, 859, 1374, 2199, 3518, 5629, 9007, 14411, 23058};
+static SemaphoreHandle_t xDataReadySem;
 
 // Function prototypes
 void draw_display(void *ctx);
@@ -109,6 +109,11 @@ void setup() {
   digitalWrite(AMP_SD_PIN, LOW);
   real_fft_plan = fft_init(FFT_N, FFT_REAL, FFT_FORWARD, fft_input, fft_output);
   init_fft_buffer(&fft_buf);
+  xDataReadySem = xSemaphoreCreateBinary();
+  if (xDataReadySem == NULL) {
+      Serial.println("Error: Could not allocate data ready semaphore");
+  }
+
   a2dp_sink.start("DevBoard_v0");
   a2dp_sink.set_stream_reader(read_data_stream);
 
@@ -270,59 +275,63 @@ void read_data_stream(const uint8_t *data, uint32_t length)
     fft_buf.fft_write[fft_buf.widx++] = (float)samples[i];
     if (fft_buf.widx >= FFT_N) {
       swap_fft_buffers(&fft_buf);
-      data_ready = true;
       fft_buf.widx = 0;
+      data_ready = true;
+      if (xSemaphoreGive(xDataReadySem) != pdTRUE) {
+        // Failed to give semaphore
+      }
     }
   } 
 }
 void process_fft()
 {
-  if (data_ready) {
-    data_ready = false;
-    int32_t start_time = millis();
-    for (int i=0; i<FFT_N; i++) {
-      fft_input[i] = fft_buf.fft_read[i];
-    }
-
-    float max_magnitude = 0;
-    float fundamental_freq = 0;
-
-    float freq_data[10] = {0.0};
-    float bucket_data[32] = {0.0};
-    float bucket_mag = 0;
-    float bucket_freq = 0;
-    int fft_idx = 0;
-    
-    int bucket_idx = 0;
-    fft_execute(real_fft_plan);
-    for (int k = 1 ; k < real_fft_plan->size / 2 ; k++)
-    {
-      /*The real part of a magnitude at a frequency is 
-        followed by the corresponding imaginary part in the output*/
-      float mag = sqrt(pow(real_fft_plan->output[2*k],2) + pow(real_fft_plan->output[2*k+1],2));
-      
-      float freq = k*1.0/TOTAL_TIME;
-      if(mag > max_magnitude)
-      {
-        max_magnitude = mag;
-        fundamental_freq = freq;
-        update_freq_array(freq_data, 10, freq, mag);
-      }
-
-      if (freq > ranges[bucket_idx]) {
-        bucket_data[2*bucket_idx] = freq;
-        bucket_data[2*bucket_idx + 1] = mag;
-        bucket_idx++;
-        bucket_mag = 0;
-        bucket_freq = 0;
-      }
-    }
-    int32_t end_time = millis();
-    Serial.print("Size: ");
-    Serial.println(real_fft_plan->size);
-
-    draw_equalizer(freq_data, 10);
+  if (xSemaphoreTake(xDataReadySem, portMAX_DELAY) == pdFALSE) {
+    Serial.println("Error: Failed to take semaphore");
+    return;
   }
+  int32_t start_time = millis();
+  for (int i=0; i<FFT_N; i++) {
+    fft_input[i] = fft_buf.fft_read[i];
+  }
+
+  float max_magnitude = 0;
+  float fundamental_freq = 0;
+
+  float freq_data[10] = {0.0};
+  float bucket_data[32] = {0.0};
+  float bucket_mag = 0;
+  float bucket_freq = 0;
+  int fft_idx = 0;
+  
+  int bucket_idx = 0;
+  fft_execute(real_fft_plan);
+  for (int k = 1 ; k < real_fft_plan->size / 2 ; k++)
+  {
+    /*The real part of a magnitude at a frequency is 
+      followed by the corresponding imaginary part in the output*/
+    float mag = sqrt(pow(real_fft_plan->output[2*k],2) + pow(real_fft_plan->output[2*k+1],2));
+    
+    float freq = k*1.0/TOTAL_TIME;
+    if(mag > max_magnitude)
+    {
+      max_magnitude = mag;
+      fundamental_freq = freq;
+      update_freq_array(freq_data, 10, freq, mag);
+    }
+
+    if (freq > ranges[bucket_idx]) {
+      bucket_data[2*bucket_idx] = freq;
+      bucket_data[2*bucket_idx + 1] = mag;
+      bucket_idx++;
+      bucket_mag = 0;
+      bucket_freq = 0;
+    }
+  }
+  int32_t end_time = millis();
+  Serial.print("Size: ");
+  Serial.println(real_fft_plan->size);
+
+  draw_equalizer(freq_data, 10);
 }
 void draw_equalizer(float *freq_data, int N) {
   int buckets[16] = {0};
@@ -377,7 +386,6 @@ void fft_task(void *pvParameters)
 {
   while (1) {
     process_fft();
-    delay(1);
   }
 }
 void display_task(void *pvParameters)
