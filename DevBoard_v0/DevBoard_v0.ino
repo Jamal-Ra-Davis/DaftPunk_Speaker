@@ -73,10 +73,12 @@ void setup() {
   digitalWrite(RGB_LED_EN, HIGH);
 
   init_shift_registers();
-  matrix_clear();
+  double_buffer.reset();
+
   for (int i=0; i<8; i++) {
-    matrix_set_pixel(i, i);
+    double_buffer.setPixel(i, i);
   }
+  double_buffer.update();
 
   FastLED.addLeds<NEOPIXEL,RGB_LED_DATA>(rgb_led, 1);
   rgb_led[0] = CRGB::Blue;
@@ -159,14 +161,15 @@ void draw_display(void *ctx)
 {
   static int idx = 0;
   test_data[0] = (1 << idx);
-  memcpy(&test_data[1], frame_buffer[idx], 5);
+  frame_buffer_t *rbuf = double_buffer.getReadBuffer();
+  memcpy(&test_data[1], rbuf->frame_buffer[idx], FRAME_BUF_COL_BYTES);
   sr_write(test_data, 6);
   idx = (idx + 1) % 8;
 }
 void snake_animation(void *ctx)
 {
   static int prev_dir = 0;
-  matrix_clear();
+  double_buffer.clear();
   int dir;
   while (1) {
     dir = rand() % 4;
@@ -216,12 +219,13 @@ void snake_animation(void *ctx)
   for (int i=BODY_LEN-1; i>=1; i--) {
     body[i].x = body[i-1].x;
     body[i].y = body[i-1].y;
-
-    matrix_set_pixel(body[i].x, body[i].y);
+    double_buffer.setPixel(body[i].x, body[i].y);
   }
   body[0].x = x;
   body[0].y = y;
-  matrix_set_pixel(body[0].x, body[0].y);
+  double_buffer.setPixel(body[0].x, body[0].y);
+
+  double_buffer.update();
 }
 void rgb_led_cycle(void *ctx)
 {
@@ -339,12 +343,13 @@ void draw_equalizer(float *freq_data, int N) {
     }
   }
 
-  matrix_clear();
+  double_buffer.clear();
   for (int i=0; i<16; i++) {
     for (int j=0; j<=buckets[i]; j++) {
-      matrix_set_pixel(i, j);
+      double_buffer.setPixel(i, j);
     }
   }
+  double_buffer.update();
   
 }
 void update_freq_array(float *freq_data, int N, float freq, float mag)

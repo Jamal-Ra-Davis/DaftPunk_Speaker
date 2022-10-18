@@ -1,54 +1,72 @@
 #include <Arduino.h>
+#include "FrameBuffer.h"
 
-uint8_t frame_buffer[8][5] = {0xFF};
-void matrix_clear() {
-    for (int i=0; i<8; i++) {
-        for (int j=0; j<5; j++) {
-            frame_buffer[i][j] = 0xFF;
+DoubleBuffer double_buffer;
+
+DoubleBuffer::DoubleBuffer()
+{
+    reset();
+}
+void DoubleBuffer::reset()
+{
+    rbuf = &buf0;
+    wbuf = &buf1;
+    for (int i=0; i<FRAME_BUF_ROWS; i++) {
+        for (int j=0; j<FRAME_BUF_COL_BYTES; j++) {
+            buf0.frame_buffer[i][j] = 0xFF;
+            buf1.frame_buffer[i][j] = 0xFF;
         }
     }
 }
-int matrix_set_pixel(uint8_t x, uint8_t y) {
-    if (x >= 40) {
-        return -1;
-    }
-    if (y >= 8) {
-        return -1;
-    }
-
-    int idx = 4 - x/8;
-    int bit_idx = x % 8;
-    frame_buffer[y][idx] &= ~(1 << bit_idx);
-    return 0;
-}
-int matrix_clear_pixel(uint8_t x, uint8_t y) {
-    if (x >= 40) {
-        return -1;
-    }
-    if (y >= 8) {
-        return -1;
-    }
-
-    int idx = 4 - x/8;
-    int bit_idx = x % 8;
-    frame_buffer[y][idx] |= (1 << bit_idx);
-    return 0;
-}
-int matrix_set_byte(uint8_t x, uint8_t y, uint8_t b) {
-    if (x >= 40) {
-        return -1;
-    }
-    if (y >= 8) {
-        return -1;
-    }
-
-    int idx = 4 - x/8;
-    frame_buffer[y][idx] = b;
-    return 0;
-}
-/*
-uint8_t[8][5] matrix_get_frame_buffer()
+void DoubleBuffer::clear()
 {
-    return frame_buffer;
+    for (int i=0; i<FRAME_BUF_ROWS; i++) {
+        for (int j=0; j<FRAME_BUF_COL_BYTES; j++) {
+            wbuf->frame_buffer[i][j] = 0xFF;
+        }
+    }
 }
-*/
+int DoubleBuffer::setPixel(uint8_t x, uint8_t y) {
+    if (x >= FRAME_BUF_COL_BYTES*8) {
+        return -1;
+    }
+    if (y >= FRAME_BUF_ROWS) {
+        return -1;
+    }
+
+    int idx = 4 - x/8;
+    int bit_idx = x % 8;
+    wbuf->frame_buffer[y][idx] &= ~(1 << bit_idx);
+    return 0;
+}
+int DoubleBuffer::clearPixel(uint8_t x, uint8_t y) {
+    if (x >= FRAME_BUF_COL_BYTES*8) {
+        return -1;
+    }
+    if (y >= FRAME_BUF_ROWS) {
+        return -1;
+    }
+
+    int idx = 4 - x/8;
+    int bit_idx = x % 8;
+    wbuf->frame_buffer[y][idx] |= (1 << bit_idx);
+    return 0;
+}
+int DoubleBuffer::setByte(uint8_t x, uint8_t y, uint8_t b) {
+    if (x >= FRAME_BUF_COL_BYTES*8) {
+        return -1;
+    }
+    if (y >= FRAME_BUF_ROWS) {
+        return -1;
+    }
+
+    int idx = 4 - x/8;
+    wbuf->frame_buffer[y][idx] = b;
+    return 0;
+}
+void DoubleBuffer::update()
+{
+    frame_buffer_t *temp = rbuf;
+    rbuf = wbuf;
+    wbuf = temp;
+}
