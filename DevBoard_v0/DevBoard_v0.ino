@@ -17,9 +17,13 @@
 #define RGB_LED_EN 17
 #define RGB_LED_DATA 27
 #define AMP_SD_PIN 4
+#define VOL_P_PIN 32
+#define VOL_M_PIN 34
+#define PAIR_PIN 35
 
 #define FFT_N 2048
 #define TOTAL_TIME 0.0464399
+#define MAX_FFT_MAG 2000000.0
 
 // Data struct definitions
 struct fft_double_buffer {
@@ -38,6 +42,7 @@ struct fft_double_buffer fft_buf;
 fft_config_t *real_fft_plan;
 int ranges[16] = {20, 32, 51, 82, 131, 210, 336, 536, 859, 1374, 2199, 3518, 5629, 9007, 14411, 23058};
 static SemaphoreHandle_t xDataReadySem;
+volatile bool pair_press = false;
 
 // Function prototypes
 void draw_display(void *ctx);
@@ -49,6 +54,9 @@ void read_data_stream(const uint8_t *data, uint32_t length);
 void process_fft();
 void draw_equalizer(float *freq_data, int N);
 void update_freq_array(float *freq_data, int N, float freq, float mag);
+
+void volume_button_handler();
+void pair_button_handler();
 
 void fft_task(void *pvParameters);
 void display_task(void *pvParameters);
@@ -71,6 +79,14 @@ void setup() {
   pinMode(RGB_LED_EN, OUTPUT);
   pinMode(RGB_LED_DATA, OUTPUT);
   digitalWrite(RGB_LED_EN, HIGH);
+
+  pinMode(VOL_P_PIN, INPUT);
+  pinMode(VOL_M_PIN, INPUT);
+  pinMode(PAIR_PIN, INPUT);
+
+  attachInterrupt(digitalPinToInterrupt(VOL_P_PIN), volume_button_handler, FALLING);
+  attachInterrupt(digitalPinToInterrupt(VOL_M_PIN), volume_button_handler, FALLING);
+  attachInterrupt(digitalPinToInterrupt(PAIR_PIN), pair_button_handler, FALLING);
 
   init_shift_registers();
   double_buffer.reset();
@@ -276,7 +292,6 @@ void read_data_stream(const uint8_t *data, uint32_t length)
     if (fft_buf.widx >= FFT_N) {
       swap_fft_buffers(&fft_buf);
       fft_buf.widx = 0;
-      data_ready = true;
       if (xSemaphoreGive(xDataReadySem) != pdTRUE) {
         // Failed to give semaphore
       }
@@ -289,10 +304,9 @@ void process_fft()
     Serial.println("Error: Failed to take semaphore");
     return;
   }
+  static int cnt = 0;
   int32_t start_time = millis();
-  for (int i=0; i<FFT_N; i++) {
-    fft_input[i] = fft_buf.fft_read[i];
-  }
+  memcpy((void*)fft_input, (void*)fft_buf.fft_read, sizeof(fft_input));
 
   float max_magnitude = 0;
   float fundamental_freq = 0;
@@ -301,21 +315,42 @@ void process_fft()
   float bucket_data[32] = {0.0};
   float bucket_mag = 0;
   float bucket_freq = 0;
+  float bucket_mags[16] = {0.0};
   int fft_idx = 0;
   
   int bucket_idx = 0;
   fft_execute(real_fft_plan);
+  bool pair_pressed = pair_press;
+  if (pair_press) {
+    pair_press = false;
+  }
   for (int k = 1 ; k < real_fft_plan->size / 2 ; k++)
   {
+    if (pair_pressed) {
+      Serial.print(real_fft_plan->output[2*k]);
+      Serial.print(", ");
+      Serial.println(real_fft_plan->output[2*k + 1]);
+    }
+
     /*The real part of a magnitude at a frequency is 
       followed by the corresponding imaginary part in the output*/
     float mag = sqrt(pow(real_fft_plan->output[2*k],2) + pow(real_fft_plan->output[2*k+1],2));
-    
     float freq = k*1.0/TOTAL_TIME;
+
+    int bidx;
+    for (bidx=0; bidx < 16; bidx++) {
+      if (freq < ranges[bidx]) {
+        break;
+      }
+    }
+    if (mag > bucket_mags[bidx]) {
+      bucket_mags[bidx] = mag;
+    }
+
     if(mag > max_magnitude)
     {
       max_magnitude = mag;
-      fundamental_freq = freq;
+      fundamental_freq = 0;
       update_freq_array(freq_data, 10, freq, mag);
     }
 
@@ -328,10 +363,30 @@ void process_fft()
     }
   }
   int32_t end_time = millis();
-  Serial.print("Size: ");
-  Serial.println(real_fft_plan->size);
 
-  draw_equalizer(freq_data, 10);
+  if (cnt % 10 == 0) {
+    Serial.println("Mags:");
+    for (int i=0; i<16; i++) {
+      Serial.print(bucket_mags[i]);
+      Serial.print(" ");
+    }
+    Serial.println();
+  }
+
+  double_buffer.clear();
+  for (int i=0; i<16; i++) {
+    if (bucket_mags[i] > MAX_FFT_MAG)  {
+      bucket_mags[i] = MAX_FFT_MAG;
+    }
+    int height = (int)((bucket_mags[i] / MAX_FFT_MAG) * 8);
+    for (int j=0; j<height; j++) {
+      double_buffer.setPixel(i, j);
+    }
+  }
+  double_buffer.update();
+
+  //draw_equalizer(freq_data, 10);
+  cnt++;
 }
 void draw_equalizer(float *freq_data, int N) {
   int buckets[16] = {0};
@@ -404,4 +459,18 @@ void timer_thread_task(void *pvParameters)
     rgb_led_cycle(NULL);
     delay(1000);
   }
+}
+void volume_button_handler()
+{
+  if (digitalRead(VOL_P_PIN) == 0) {
+    Serial.println("Volume Increase Pressed");
+  }
+  if (digitalRead(VOL_M_PIN) == 0) {
+    Serial.println("Volume Decrease Pressed");
+  }
+}
+void pair_button_handler()
+{
+  pair_press = true;
+  Serial.println("Pair Button Pressed");
 }
