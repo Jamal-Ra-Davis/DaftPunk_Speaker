@@ -24,6 +24,7 @@
 #define FFT_N 2048
 #define TOTAL_TIME 0.0464399
 #define MAX_FFT_MAG 2000000.0
+#define FFT_BUCKETS 40
 
 // Data struct definitions
 struct fft_double_buffer {
@@ -40,7 +41,8 @@ float fft_output[FFT_N];
 float fft_input[FFT_N];
 struct fft_double_buffer fft_buf;
 fft_config_t *real_fft_plan;
-int ranges[16] = {20, 32, 51, 82, 131, 210, 336, 536, 859, 1374, 2199, 3518, 5629, 9007, 14411, 23058};
+//int ranges[FFT_BUCKETS] = {20, 32, 51, 82, 131, 210, 336, 536, 859, 1374, 2199, 3518, 5629, 9007, 14411, 23058};
+uint16_t ranges[FFT_BUCKETS] = {100, 301, 506, 716, 932, 1158, 1393, 1639, 1898, 2172, 2460, 2765, 3088, 3429, 3790, 4173, 4577, 5005, 5456, 5933, 6436, 6967, 7526, 8113, 8731, 9380, 10061, 10775, 11523, 12305, 13124, 13978, 14870, 15801, 16770, 17780, 18830, 19922, 21057, 22235};
 static SemaphoreHandle_t xDataReadySem;
 volatile bool pair_press = false;
 
@@ -315,7 +317,7 @@ void process_fft()
   float bucket_data[32] = {0.0};
   float bucket_mag = 0;
   float bucket_freq = 0;
-  float bucket_mags[16] = {0.0};
+  float bucket_mags[FFT_BUCKETS] = {0.0};
   int fft_idx = 0;
   
   int bucket_idx = 0;
@@ -338,7 +340,7 @@ void process_fft()
     float freq = k*1.0/TOTAL_TIME;
 
     int bidx;
-    for (bidx=0; bidx < 16; bidx++) {
+    for (bidx=0; bidx < FFT_BUCKETS; bidx++) {
       if (freq < ranges[bidx]) {
         break;
       }
@@ -364,9 +366,9 @@ void process_fft()
   }
   int32_t end_time = millis();
 
-  if (cnt % 10 == 0) {
+  if (cnt % 10 == 0 && false) {
     Serial.println("Mags:");
-    for (int i=0; i<16; i++) {
+    for (int i=0; i<FFT_BUCKETS; i++) {
       Serial.print(bucket_mags[i]);
       Serial.print(" ");
     }
@@ -374,7 +376,7 @@ void process_fft()
   }
 
   double_buffer.clear();
-  for (int i=0; i<16; i++) {
+  for (int i=0; i<FFT_BUCKETS; i++) {
     if (bucket_mags[i] > MAX_FFT_MAG)  {
       bucket_mags[i] = MAX_FFT_MAG;
     }
