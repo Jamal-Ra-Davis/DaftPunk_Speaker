@@ -10,16 +10,10 @@
 #include <BluetoothA2DPSource.h>
 #include <config.h>
 #include <SoundData.h>
-#include <VolumeControl.h>
+#include <A2DPVolumeControl.h>
 
 #include "FFT.h"
-
-#define RGB_LED_EN 17
-#define RGB_LED_DATA 27
-#define AMP_SD_PIN 4
-#define VOL_P_PIN 32
-#define VOL_M_PIN 34
-#define PAIR_PIN 35
+#include "src/global_defines.h"
 
 #define FFT_N 2048
 #define TOTAL_TIME 0.0464399
@@ -147,7 +141,7 @@ void setup() {
     "FFT_Task",   // A name just for humans
     10000,        // Stack size
     NULL,
-    4,          // priority
+    FFT_TASK_PRIORITY,          // priority
     NULL
   );
 
@@ -156,7 +150,7 @@ void setup() {
     "Display_Task",   // A name just for humans
     4096,        // Stack size
     NULL,
-    5,          // priority
+    DISPLAY_TASK_PRIORITY,          // priority
     NULL
   );
   
@@ -166,7 +160,7 @@ void setup() {
     "Timer_Thread_Task",   // A name just for humans
     1024,        // Stack size
     NULL,
-    1,          // priority
+    TIMER_THREAD_TASK_PRIORITY,          // priority
     NULL
   );
   //vTaskStartScheduler();
@@ -186,8 +180,8 @@ void draw_display(void *ctx)
   test_data[0] = (1 << idx);
   frame_buffer_t *rbuf = double_buffer.getReadBuffer();
   memcpy(&test_data[1], rbuf->frame_buffer[idx], FRAME_BUF_COL_BYTES);
-  sr_write(test_data, 6);
-  idx = (idx + 1) % 8;
+  sr_write(test_data, FRAME_BUF_COL_BYTES + 1);
+  idx = (idx + 1) % FRAME_BUF_ROWS;
 }
 void snake_animation(void *ctx)
 {
@@ -215,26 +209,26 @@ void snake_animation(void *ctx)
   switch (dir) {
     case 0:
       x++;
-      if (x >= 40) {
+      if (x >= FRAME_BUF_COLS) {
         x = 0;
       }
       break;
     case 1:
       x--;
       if (x < 0) {
-        x = 39;
+        x = FRAME_BUF_COLS-1;
       }
       break;
     case 2:
       y++;
-      if (y >= 8) {
+      if (y >= FRAME_BUF_ROWS) {
         y = 0;
       }
       break;
     case 3:
       y--;
       if (y < 0) {
-        y = 7;
+        y = FRAME_BUF_ROWS-1;
       }
       break;
   }
@@ -462,14 +456,26 @@ void timer_thread_task(void *pvParameters)
     delay(1000);
   }
 }
+static const uint8_t MAX_VOLUME_LEVEL = 8;
+static const uint8_t VOLUME_SCALE = 16;
+static int8_t volume_level = 4; 
 void volume_button_handler()
 {
   if (digitalRead(VOL_P_PIN) == 0) {
     Serial.println("Volume Increase Pressed");
+    volume_level++;
+    if (volume_level > MAX_VOLUME_LEVEL) {
+      volume_level = MAX_VOLUME_LEVEL;
+    }
   }
   if (digitalRead(VOL_M_PIN) == 0) {
     Serial.println("Volume Decrease Pressed");
+    volume_level--;
+    if (volume_level < 0) {
+        volume_level = 0;
+    }
   }
+  a2dp_sink.set_volume(volume_level * VOLUME_SCALE);
 }
 void pair_button_handler()
 {

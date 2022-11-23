@@ -2,6 +2,7 @@
 
 #define FRAME_BUF_ROWS      8
 #define FRAME_BUF_COL_BYTES 5
+#define FRAME_BUF_COLS (FRAME_BUF_COL_BYTES*8)
 
 typedef struct {
     uint8_t frame_buffer[FRAME_BUF_ROWS][FRAME_BUF_COL_BYTES] = {0xFF};    
