@@ -7,6 +7,8 @@
 #define VOL_P_PIN 32
 #define VOL_M_PIN 34
 #define PAIR_PIN 35
+#define I2C_SDA_PIN 21
+#define I2C_SCL_PIN 19
 
 // Task Priorities
 #define FFT_TASK_PRIORITY 4
