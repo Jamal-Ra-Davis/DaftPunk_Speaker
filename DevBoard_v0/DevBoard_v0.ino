@@ -8,12 +8,12 @@
 #include <BluetoothA2DPCommon.h>
 #include <BluetoothA2DPSink.h>
 #include <BluetoothA2DPSource.h>
-#include <config.h>
 #include <SoundData.h>
 #include <A2DPVolumeControl.h>
 
 #include "src/global_defines.h"
 #include "src/FFT_task.h"
+#include "src/Display_task.h"
 
 #define I2C_BUS_SCAN_MAX 16
 
@@ -28,7 +28,6 @@ static const uint8_t VOLUME_SCALE = 16;
 static int8_t volume_level = 4;
 
 // Function prototypes
-void draw_display(void *ctx);
 void snake_animation(void *ctx);
 void rgb_led_cycle(void *ctx);
 
@@ -47,8 +46,6 @@ struct pos {
 };
 #define BODY_LEN 10
 struct pos body[BODY_LEN];
-volatile uint8_t sr_data[2] = {0xAA, 0xF0};
-uint8_t test_data[6] = {0x00};
 
 void setup() {
   bool init_success = true;
@@ -58,18 +55,23 @@ void setup() {
 
   pinMode(RGB_LED_EN, OUTPUT);
   pinMode(RGB_LED_DATA, OUTPUT);
-  digitalWrite(RGB_LED_EN, HIGH);
-
+  pinMode(AMP_SD_PIN, OUTPUT);
+  
   pinMode(VOL_P_PIN, INPUT);
   pinMode(VOL_M_PIN, INPUT);
   pinMode(PAIR_PIN, INPUT);
+
+  digitalWrite(AMP_SD_PIN, LOW);
+  digitalWrite(RGB_LED_EN, HIGH);
 
   attachInterrupt(digitalPinToInterrupt(VOL_P_PIN), volume_button_handler, FALLING);
   attachInterrupt(digitalPinToInterrupt(VOL_M_PIN), volume_button_handler, FALLING);
   attachInterrupt(digitalPinToInterrupt(PAIR_PIN), pair_button_handler, FALLING);
 
-  init_shift_registers();
-  double_buffer.reset();
+  if (init_display_task() < 0) {
+    Serial.println("Failed it start Display task");
+    init_success = false;
+  }
 
   for (int i=0; i<8; i++) {
     double_buffer.setPixel(i, i);
@@ -100,34 +102,12 @@ void setup() {
     body[i].y = y;
   }
 
-
-  // Init Audio
-  pinMode(AMP_SD_PIN, OUTPUT);
-  digitalWrite(AMP_SD_PIN, LOW);
-
   if (init_fft_task() < 0) {
     Serial.println("Failed it start FFT task");
     init_success = false;
   }
 
-  a2dp_sink.start("DevBoard_v0");
-  a2dp_sink.set_stream_reader(read_data_stream);
-
-
-  //register_timer_thread(snake_animation, NULL, 33000);
-  //register_timer_thread(rgb_led_cycle, NULL, 1000000);
-  //register_timer_thread(draw_display, NULL, 1400);
-
   // Create FreeRTOS Tasks
-  xTaskCreate(
-    display_task,
-    "Display_Task",   // A name just for humans
-    4096,        // Stack size
-    NULL,
-    DISPLAY_TASK_PRIORITY,          // priority
-    NULL
-  );
-  
   xTaskCreate(
     timer_thread_task,
     "Timer_Thread_Task",   // A name just for humans
@@ -136,7 +116,10 @@ void setup() {
     TIMER_THREAD_TASK_PRIORITY,          // priority
     NULL
   );
-  //vTaskStartScheduler();
+
+  // Init Audio
+  a2dp_sink.start("DevBoard_v0");
+  a2dp_sink.set_stream_reader(read_data_stream);
 }
 
 void loop() {
@@ -147,15 +130,6 @@ void loop() {
  delay(1000);
 }
 
-void draw_display(void *ctx)
-{
-  static int idx = 0;
-  test_data[0] = (1 << idx);
-  frame_buffer_t *rbuf = double_buffer.getReadBuffer();
-  memcpy(&test_data[1], rbuf->frame_buffer[idx], FRAME_BUF_COL_BYTES);
-  sr_write(test_data, FRAME_BUF_COL_BYTES + 1);
-  idx = (idx + 1) % FRAME_BUF_ROWS;
-}
 void snake_animation(void *ctx)
 {
   static int prev_dir = 0;
@@ -233,8 +207,6 @@ void rgb_led_cycle(void *ctx)
   FastLED.show();
 }
 
-
-
 /*
 // NOTE: Don't delete with other stuff you moved to FFT_task.cpp
 void draw_equalizer(float *freq_data, int N) {
@@ -266,14 +238,6 @@ void draw_equalizer(float *freq_data, int N) {
   
 }
 */
-
-void display_task(void *pvParameters)
-{
-  while (1) {
-    draw_display(NULL);
-    delay(1);
-  }
-}
 void timer_thread_task(void *pvParameters)
 {
   //update_timer_threads();

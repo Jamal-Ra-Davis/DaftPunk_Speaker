@@ -210,8 +210,6 @@ void process_fft()
         }
     }
     double_buffer.update();
-
-    // draw_equalizer(freq_data, 10);
     cnt++;
 }
 
