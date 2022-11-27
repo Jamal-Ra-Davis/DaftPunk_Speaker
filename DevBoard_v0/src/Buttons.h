@@ -1,3 +1,3 @@
 #pragma once
 
-void init_buttons();
+int init_buttons();

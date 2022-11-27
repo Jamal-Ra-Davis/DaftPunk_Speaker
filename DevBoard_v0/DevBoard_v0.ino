@@ -56,10 +56,18 @@ void setup() {
   digitalWrite(AMP_SD_PIN, LOW);
   digitalWrite(RGB_LED_EN, HIGH);
 
-  init_buttons();
-
   if (init_display_task() < 0) {
-    Serial.println("Failed it start Display task");
+    Serial.println("Error: Failed to start Display task");
+    init_success = false;
+  }
+
+  if (init_event_manager() < 0) {
+    Serial.println("Error: Failed to init event manager");
+    init_success = false;
+  }
+
+  if (init_buttons() < 0) {
+    Serial.println("Error: Failed to init button handlers");
     init_success = false;
   }
 
