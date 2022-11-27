@@ -14,6 +14,7 @@
 #include "src/global_defines.h"
 #include "src/FFT_task.h"
 #include "src/Display_task.h"
+#include "src/Buttons.h"
 
 #define I2C_BUS_SCAN_MAX 16
 
@@ -22,10 +23,6 @@
 // Global Variables
 BluetoothA2DPSink a2dp_sink;
 CRGBArray<1> rgb_led;
-volatile bool pair_press = false;
-static const uint8_t MAX_VOLUME_LEVEL = 8;
-static const uint8_t VOLUME_SCALE = 16;
-static int8_t volume_level = 4;
 
 // Function prototypes
 void snake_animation(void *ctx);
@@ -33,8 +30,6 @@ void rgb_led_cycle(void *ctx);
 
 //void draw_equalizer(float *freq_data, int N);
 
-void volume_button_handler();
-void pair_button_handler();
 
 void fft_task(void *pvParameters);
 void display_task(void *pvParameters);
@@ -57,16 +52,11 @@ void setup() {
   pinMode(RGB_LED_DATA, OUTPUT);
   pinMode(AMP_SD_PIN, OUTPUT);
   
-  pinMode(VOL_P_PIN, INPUT);
-  pinMode(VOL_M_PIN, INPUT);
-  pinMode(PAIR_PIN, INPUT);
 
   digitalWrite(AMP_SD_PIN, LOW);
   digitalWrite(RGB_LED_EN, HIGH);
 
-  attachInterrupt(digitalPinToInterrupt(VOL_P_PIN), volume_button_handler, FALLING);
-  attachInterrupt(digitalPinToInterrupt(VOL_M_PIN), volume_button_handler, FALLING);
-  attachInterrupt(digitalPinToInterrupt(PAIR_PIN), pair_button_handler, FALLING);
+  init_buttons();
 
   if (init_display_task() < 0) {
     Serial.println("Failed it start Display task");
@@ -123,10 +113,6 @@ void setup() {
 }
 
 void loop() {
-  /*
-  process_fft();
-  update_timer_threads();
-  */
  delay(1000);
 }
 
@@ -247,28 +233,4 @@ void timer_thread_task(void *pvParameters)
     rgb_led_cycle(NULL);
     delay(1000);
   }
-}
- 
-void volume_button_handler()
-{
-  if (digitalRead(VOL_P_PIN) == 0) {
-    Serial.println("Volume Increase Pressed");
-    volume_level++;
-    if (volume_level > MAX_VOLUME_LEVEL) {
-      volume_level = MAX_VOLUME_LEVEL;
-    }
-  }
-  if (digitalRead(VOL_M_PIN) == 0) {
-    Serial.println("Volume Decrease Pressed");
-    volume_level--;
-    if (volume_level < 0) {
-        volume_level = 0;
-    }
-  }
-  a2dp_sink.set_volume(volume_level * VOLUME_SCALE);
-}
-void pair_button_handler()
-{
-  pair_press = true;
-  Serial.println("Pair Button Pressed");
 }
