@@ -4,16 +4,18 @@
 #include "global_defines.h"
 #include "Events.h"
 
-extern BluetoothA2DPSink a2dp_sink;
+//extern BluetoothA2DPSink a2dp_sink;
 
 #define VOL_TIMER_PERIOD 500
 #define SHORT_PRESS_PERIOD 250
 #define DEBOUNCE_PERIOD 50
 
+/*
 static const uint8_t MAX_VOLUME_LEVEL = 8;
 static const uint8_t VOLUME_SCALE = 16;
 static int8_t volume_level = 4;
 static volatile bool pair_press = false;
+*/
 
 static void volume_p_button_handler();
 static void volume_m_button_handler();
@@ -66,32 +68,6 @@ int init_buttons()
   return 0;
 }
 
-// TODO: Want volume buttons to increase volume repeatedly if held down, no long press event. Use timer to achive this
-/*
-static void volume_button_handler()
-{
-  if (digitalRead(VOL_P_PIN) == 0)
-  {
-    Serial.println("Volume Increase Pressed");
-
-    volume_level++;
-    if (volume_level > MAX_VOLUME_LEVEL)
-    {
-      volume_level = MAX_VOLUME_LEVEL;
-    }
-  }
-  if (digitalRead(VOL_M_PIN) == 0)
-  {
-    Serial.println("Volume Decrease Pressed");
-    volume_level--;
-    if (volume_level < 0)
-    {
-      volume_level = 0;
-    }
-  }
-  a2dp_sink.set_volume(volume_level * VOLUME_SCALE);
-}
-*/
 static void volume_button_handler(volume_key_t key)
 {
   if (digitalRead(vol_data[key].pin) == 0)
@@ -152,9 +128,6 @@ static void volume_m_button_handler()
 // Pair button can have normal short press long press behavior - LP: pair action, SP: select action
 static void pair_button_handler()
 {
-  //pair_press = true;
-  //Serial.println("Pair Button Pressed");
-
   static uint32_t press_time = 0;
   if (digitalRead(PAIR_PIN) == 0)
   {

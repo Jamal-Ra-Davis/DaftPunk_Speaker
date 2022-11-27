@@ -15,6 +15,7 @@
 #include "src/FFT_task.h"
 #include "src/Display_task.h"
 #include "src/Buttons.h"
+#include "src/Events.h"
 
 #define I2C_BUS_SCAN_MAX 16
 
@@ -42,7 +43,44 @@ struct pos {
 #define BODY_LEN 10
 struct pos body[BODY_LEN];
 
+static const uint8_t MAX_VOLUME_LEVEL = 8;
+static const uint8_t VOLUME_SCALE = 16;
+static int8_t volume_level = 4;
+static volatile bool pair_press = false;
+
+static void volume_increase(void *ctx)
+{
+  Serial.println("Volume Increase Pressed");
+  volume_level++;
+  if (volume_level > MAX_VOLUME_LEVEL)
+  {
+    volume_level = MAX_VOLUME_LEVEL;
+  }
+  a2dp_sink.set_volume(volume_level * VOLUME_SCALE);
+}
+static void volume_decrease(void *ctx)
+{
+  Serial.println("Volume Decrease Pressed");
+  volume_level--;
+  if (volume_level < 0)
+  {
+    volume_level = 0;
+  }
+  a2dp_sink.set_volume(volume_level * VOLUME_SCALE);
+}
+static void select_action(void *ctx)
+{
+  Serial.println("Select button pressed");
+}
+static void pair_action(void *ctx)
+{
+  pair_press = true;
+  Serial.println("Pair Button Pressed");
+}
+
+
 void setup() {
+  int ret = 0;
   bool init_success = true;
   Serial.begin(115200);
   Wire.begin(I2C_SDA_PIN, I2C_SCL_PIN);
@@ -63,6 +101,15 @@ void setup() {
 
   if (init_event_manager() < 0) {
     Serial.println("Error: Failed to init event manager");
+    init_success = false;
+  }
+  ret |= register_event_callback(VOL_P_SHORT_PRESS, volume_increase, NULL);
+  ret |= register_event_callback(VOL_M_SHORT_PRESS, volume_decrease, NULL);
+  ret |= register_event_callback(PAIR_SHORT_PRESS, select_action, NULL);
+  ret |= register_event_callback(PAIR_LONG_PRESS, pair_action, NULL);
+
+  if (ret != 0) {
+    Serial.println("Error: Failed to register event callbacks");
     init_success = false;
   }
 
