@@ -21,11 +21,14 @@ struct fft_double_buffer
 
 // File Globals
 static SemaphoreHandle_t xDataReadySem;
-static uint16_t ranges[FFT_BUCKETS] = {
-    100, 301, 506, 716, 932, 1158, 1393, 1639, 1898, 2172,
-    2460, 2765, 3088, 3429, 3790, 4173, 4577, 5005, 5456, 5933,
-    6436, 6967, 7526, 8113, 8731, 9380, 10061, 10775, 11523, 12305,
-    13124, 13978, 14870, 15801, 16770, 17780, 18830, 19922, 21057, 22235};
+static const uint16_t ranges[FFT_BUCKETS] = {
+        100, 141, 185, 233, 285, 343, 406, 476, 553,
+        637, 729, 829, 937, 1053, 1179, 1314, 1459,
+        1614, 1778, 1954, 2140, 2336, 2544, 2764, 2995,
+        3238, 3493, 3760, 4040, 4333, 4638, 4957, 5289,
+        5635, 5994, 6367, 6754, 7156, 7572, 8002,
+};
+static const uint16_t MAX_FREQ = 8447;
 static float fft_output[FFT_N];
 static float fft_input[FFT_N];
 static struct fft_double_buffer fft_buf;
@@ -154,6 +157,11 @@ void process_fft()
           followed by the corresponding imaginary part in the output*/
         float mag = sqrt(pow(real_fft_plan->output[2 * k], 2) + pow(real_fft_plan->output[2 * k + 1], 2));
         float freq = k * 1.0 / TOTAL_TIME;
+        if (freq > MAX_FREQ)
+        {
+            // Exit loop if current freq exceeds values in FFT bucket range
+            break;
+        }
 
         int bidx;
         for (bidx = 0; bidx < FFT_BUCKETS; bidx++)
@@ -163,6 +171,11 @@ void process_fft()
                 break;
             }
         }
+        if (bidx >= FFT_BUCKETS) 
+        {
+            bidx = FFT_BUCKETS - 1;
+        }
+
         if (mag > bucket_mags[bidx])
         {
             bucket_mags[bidx] = mag;
