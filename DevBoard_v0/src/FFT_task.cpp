@@ -2,6 +2,7 @@
 #include "../FFT.h"
 #include "global_defines.h"
 #include "FrameBuffer.h"
+#include "Logging.h"
 
 #define FFT_TASK_STACK_SIZE 10000
 #define FFT_N 2048
@@ -45,7 +46,7 @@ int init_fft_task()
     xDataReadySem = xSemaphoreCreateBinary();
     if (xDataReadySem == NULL)
     {
-        Serial.println("Error: Could not allocate data ready semaphore");
+        log_err("Could not allocate data ready semaphore");
         return -1;
     }
     xTaskCreate(
@@ -112,7 +113,7 @@ void process_fft()
 {
     if (xSemaphoreTake(xDataReadySem, portMAX_DELAY) == pdFALSE)
     {
-        Serial.println("Error: Failed to take semaphore");
+        log_err("Failed to take semaphore");
         return;
     }
     static int cnt = 0;

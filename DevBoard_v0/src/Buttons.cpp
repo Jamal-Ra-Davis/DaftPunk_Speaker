@@ -3,6 +3,7 @@
 #include "Buttons.h"
 #include "global_defines.h"
 #include "Events.h"
+#include "Logging.h"
 
 //extern BluetoothA2DPSink a2dp_sink;
 
@@ -50,7 +51,7 @@ int init_buttons()
   vol_data[VOLUME_PLUS].pin = VOL_P_PIN;
   if (vol_data[VOLUME_PLUS].timer == NULL)
   {
-    Serial.println("Error: Failed to create timer for volume plus");
+    log_err("Failed to create timer for volume plus");
     return -1;
   }
 
@@ -58,7 +59,7 @@ int init_buttons()
   vol_data[VOLUME_MINUS].pin = VOL_M_PIN;
   if (vol_data[VOLUME_MINUS].timer == NULL)
   {
-    Serial.println("Error: Failed to create timer for volume minus");
+    log_err("Failed to create timer for volume minus");
     return -1;
   }
 
@@ -81,7 +82,7 @@ static void volume_button_handler(volume_key_t key)
     if (xTimerStart(vol_data[key].timer, 0) != pdPASS)
     {
       // Failed to start timer
-      Serial.println("Error: Failed to start timer");
+      log_err("Failed to start timer");
     }
   }
   else
@@ -92,7 +93,7 @@ static void volume_button_handler(volume_key_t key)
     if (xTimerStop(vol_data[key].timer, 0) != pdPASS)
     {
       // Failed to stop timer
-      Serial.println("Error: Failed to stop timer");
+      log_err("Failed to stop timer");
     }
 
     // Compare release time to press time to check for short press
@@ -163,8 +164,7 @@ static void volume_timer_func(TimerHandle_t xTimer)
   id = (uint32_t)pvTimerGetTimerID(xTimer);
   if (id >= NUM_VOLUME_KEYS)
   {
-    Serial.print("Error: Invalid timer ID = ");
-    Serial.println(id);
+    log_err("Invalid timer ID (%d)", id);
     return;
   }
 
@@ -183,7 +183,7 @@ static void volume_timer_func(TimerHandle_t xTimer)
     if (xTimerStart(xTimer, 0) != pdPASS)
     {
       // Failed to start timer
-      Serial.println("Error: Failed to start timer");
+      log_err("Failed to start timer");
     }
   }
 }

@@ -16,6 +16,7 @@
 #include "src/Display_task.h"
 #include "src/Buttons.h"
 #include "src/Events.h"
+#include "src/Logging.h"
 
 #define I2C_BUS_SCAN_MAX 16
 
@@ -96,6 +97,11 @@ void setup() {
 
   if (init_display_task() < 0) {
     Serial.println("Error: Failed to start Display task");
+    init_success = false;
+  }
+
+  if (init_logger() < 0) {
+    Serial.println("Error: Failed to init logger");
     init_success = false;
   }
 
@@ -283,7 +289,8 @@ void timer_thread_task(void *pvParameters)
 {
   //update_timer_threads();
   while (1) {
-    Serial.println("Hello from task 1");
+    //Serial.println("Hello from task 1");
+    log_inf("Hello from task 1");
     digitalWrite(RGB_LED_EN, HIGH);
     rgb_led_cycle(NULL);
     delay(1000);

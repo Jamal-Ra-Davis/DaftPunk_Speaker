@@ -1,6 +1,7 @@
 #include <Arduino.h>
 #include "Events.h"
 #include "global_defines.h"
+#include "Logging.h"
 
 #define MAX_EVENTS 10
 #define EVENT_MANAGER_TASK_STACK_SIZE 4096
@@ -32,14 +33,14 @@ int init_event_manager()
     event_queue = xQueueCreate(MAX_EVENTS, sizeof(system_event_t));
     if (event_queue == NULL)
     {
-        Serial.println("Error: Failed to create event queue");
+        log_err("Failed to create event queue");
         return -1;
     }
 
     event_mutex = xSemaphoreCreateMutex();
     if (event_mutex == NULL)
     {
-        Serial.println("Error: Failed to create event mutex");
+        log_err("Failed to create event mutex");
         return -1;
     }
 
@@ -134,12 +135,12 @@ static void event_manager_task(void *pvParameters)
 {
     if (event_queue == NULL)
     {
-        Serial.println("Error: Could not get handle to system event queue");
+        log_err("Could not get handle to system event queue");
         vTaskDelete(NULL);
     }
     if (event_mutex == NULL)
     {
-        Serial.println("Error: Could not get handle to event mutex");
+        log_err("Could not get handle to system event mutex");
         vTaskDelete(NULL);
     }
 
@@ -149,7 +150,7 @@ static void event_manager_task(void *pvParameters)
         xQueueReceive(event_queue, &event, portMAX_DELAY);
         if (event >= NUM_EVENTS)
         {
-            Serial.println("Error: Invalid event");
+            log_err("Invalid event");
             continue;
         }
 
