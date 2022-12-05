@@ -20,6 +20,7 @@ class DoubleBuffer {
         DoubleBuffer();
         void reset();
         void clear();
+        void copy();
         int setPixel(uint8_t x, uint8_t y);
         int clearPixel(uint8_t x, uint8_t y);
         int setByte(uint8_t x, uint8_t y, uint8_t b);

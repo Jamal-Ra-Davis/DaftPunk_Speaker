@@ -1,6 +1,8 @@
 #include <Arduino.h>
 #include "FrameBuffer.h"
 
+#define BITS_PER_BYTE 8
+
 DoubleBuffer double_buffer;
 
 DoubleBuffer::DoubleBuffer()
@@ -26,8 +28,12 @@ void DoubleBuffer::clear()
         }
     }
 }
+void DoubleBuffer::copy()
+{
+    memcpy(wbuf, rbuf, sizeof(frame_buffer_t));
+}
 int DoubleBuffer::setPixel(uint8_t x, uint8_t y) {
-    if (x >= FRAME_BUF_COL_BYTES*8) {
+    if (x >= FRAME_BUF_COL_BYTES*BITS_PER_BYTE) {
         return -1;
     }
     if (y >= FRAME_BUF_ROWS) {
@@ -40,7 +46,7 @@ int DoubleBuffer::setPixel(uint8_t x, uint8_t y) {
     return 0;
 }
 int DoubleBuffer::clearPixel(uint8_t x, uint8_t y) {
-    if (x >= FRAME_BUF_COL_BYTES*8) {
+    if (x >= FRAME_BUF_COL_BYTES*BITS_PER_BYTE) {
         return -1;
     }
     if (y >= FRAME_BUF_ROWS) {
@@ -53,7 +59,7 @@ int DoubleBuffer::clearPixel(uint8_t x, uint8_t y) {
     return 0;
 }
 int DoubleBuffer::setByte(uint8_t x, uint8_t y, uint8_t b) {
-    if (x >= FRAME_BUF_COL_BYTES*8) {
+    if (x >= FRAME_BUF_COL_BYTES*BITS_PER_BYTE) {
         return -1;
     }
     if (y >= FRAME_BUF_ROWS) {
