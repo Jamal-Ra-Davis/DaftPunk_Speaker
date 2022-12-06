@@ -46,12 +46,12 @@ struct pos body[BODY_LEN];
 
 static const uint8_t MAX_VOLUME_LEVEL = 8;
 static const uint8_t VOLUME_SCALE = 16;
-static int8_t volume_level = 4;
+static int8_t volume_level = 2;
 static volatile bool pair_press = false;
 
 static void volume_increase(void *ctx)
 {
-  Serial.println("Volume Increase Pressed");
+  log_inf("Volume Increase Pressed");
   volume_level++;
   if (volume_level > MAX_VOLUME_LEVEL)
   {
@@ -61,7 +61,7 @@ static void volume_increase(void *ctx)
 }
 static void volume_decrease(void *ctx)
 {
-  Serial.println("Volume Decrease Pressed");
+  log_inf("Volume Decrease Pressed");
   volume_level--;
   if (volume_level < 0)
   {
@@ -71,12 +71,12 @@ static void volume_decrease(void *ctx)
 }
 static void select_action(void *ctx)
 {
-  Serial.println("Select button pressed");
+  log_inf("Select button pressed");
 }
 static void pair_action(void *ctx)
 {
   pair_press = true;
-  Serial.println("Pair Button Pressed");
+  log_inf("Pair Button Pressed");
 }
 
 
@@ -162,7 +162,7 @@ void setup() {
   xTaskCreate(
     timer_thread_task,
     "Timer_Thread_Task",   // A name just for humans
-    1024,        // Stack size
+    4096,        // Stack size
     NULL,
     TIMER_THREAD_TASK_PRIORITY,          // priority
     NULL
@@ -170,6 +170,7 @@ void setup() {
 
   // Init Audio
   a2dp_sink.start("DevBoard_v0");
+  a2dp_sink.set_volume(volume_level * VOLUME_SCALE);
   a2dp_sink.set_stream_reader(read_data_stream);
 }
 

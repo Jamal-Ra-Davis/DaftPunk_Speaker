@@ -2,7 +2,7 @@
 #include "Logging.h"
 #include "global_defines.h"
 
-#define LOGGER_TASK_SIZE 4096
+#define LOGGER_TASK_SIZE 8192
 #define MAX_LOG_CHUNK_LEN 32
 #define MAX_LOG_LEN 256
 #define MAX_LOGS 64
@@ -18,7 +18,7 @@ struct log_message
     log_level_t level;
 #if (configUSE_TRACE_FACILITY == 1)
     char task_name[MAX_TASK_NAME_LEN];
-#endif 
+#endif
     char buf[MAX_LOG_CHUNK_LEN];
 };
 
@@ -216,7 +216,7 @@ int _log(log_level_t level, bool isr, const char *fmt, va_list args)
         {
             bytes_written = MAX_LOG_CHUNK_LEN - 1;
         }
-        else 
+        else
         {
             msg.end = true;
         }
@@ -267,11 +267,18 @@ static void logger_task(void *pvParameters)
         {
             if (xSemaphoreTake(log_mutex, portMAX_DELAY) == pdTRUE)
             {
-                int cnt = dropped_messages;
-                dropped_messages = 0;
-                xSemaphoreGive(log_mutex);
-                snprintf(scratch_buf, SCRATCH_BUF_SIZE, "---- %d Messages Dropped ----\n", cnt);
-                Serial.write(scratch_buf);
+                if (dropped_messages > 0)
+                {
+                    int cnt = dropped_messages;
+                    dropped_messages = 0;
+                    xSemaphoreGive(log_mutex);
+                    snprintf(scratch_buf, SCRATCH_BUF_SIZE, "---- %d Messages Dropped ----\n", cnt);
+                    Serial.write(scratch_buf);
+                }
+                else 
+                {
+                    xSemaphoreGive(log_mutex);
+                }
             }
 
             uint32_t s, ms;
@@ -295,7 +302,8 @@ static void logger_task(void *pvParameters)
             Serial.write(msg.buf);
         }
 
-        if (msg.end) {
+        if (msg.end)
+        {
             Serial.write("\n");
         }
     }
