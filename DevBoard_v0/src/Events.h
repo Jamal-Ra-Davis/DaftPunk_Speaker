@@ -7,6 +7,8 @@ typedef enum {
     VOL_M_LONG_PRESS,
     PAIR_SHORT_PRESS,
     PAIR_LONG_PRESS,
+    CHARGE_START,
+    CHARGE_STOP,
     NUM_EVENTS,
 } system_event_t;
 

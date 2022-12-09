@@ -4,6 +4,7 @@
 #define RGB_LED_EN 17
 #define RGB_LED_DATA 27
 #define AMP_SD_PIN 4
+#define CHG_STAT_PIN 2
 
 #define VOL_P_PIN 32
 #define VOL_M_PIN 34

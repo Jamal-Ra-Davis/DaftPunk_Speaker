@@ -10,6 +10,7 @@
 #include <BluetoothA2DPSource.h>
 #include <SoundData.h>
 #include <A2DPVolumeControl.h>
+#include <Adafruit_MAX1704X.h>
 
 #include "src/global_defines.h"
 #include "src/FFT_task.h"
@@ -25,6 +26,7 @@
 // Global Variables
 BluetoothA2DPSink a2dp_sink;
 CRGBArray<1> rgb_led;
+Adafruit_MAX17048 maxlipo;
 
 // Function prototypes
 void snake_animation(void *ctx);
@@ -79,6 +81,47 @@ static void pair_action(void *ctx)
   log_inf("Pair Button Pressed");
 }
 
+volatile bool start_busy = false;
+volatile bool stop_busy = false;
+static void chg_stat_isr()
+{
+  if (digitalRead(CHG_STAT_PIN)) {
+    if (!stop_busy)
+      push_event(CHARGE_STOP, true);
+  }
+  else {
+    if (!start_busy)
+      push_event(CHARGE_START, true);
+  }
+}
+static void charge_start_action(void *ctx)
+{
+  log_inf("Charging started");
+  start_busy = true;
+  for (int i=0; i<10; i++) {
+    rgb_led[0] = CRGB::Black;
+    FastLED.show();
+    delay(50);
+    rgb_led[0] = CRGB::Green;
+    FastLED.show();
+    delay(50);
+  }
+  start_busy = false;
+}
+static void charge_stop_action(void *ctx)
+{
+  log_inf("Charging stopped");
+  stop_busy = true;
+  for (int i=0; i<10; i++) {
+    rgb_led[0] = CRGB::Black;
+    FastLED.show();
+    delay(50);
+    rgb_led[0] = CRGB::Red;
+    FastLED.show();
+    delay(50);
+  }
+  stop_busy = false;
+}
 
 void setup() {
   int ret = 0;
@@ -90,7 +133,6 @@ void setup() {
   pinMode(RGB_LED_EN, OUTPUT);
   pinMode(RGB_LED_DATA, OUTPUT);
   pinMode(AMP_SD_PIN, OUTPUT);
-  
 
   digitalWrite(AMP_SD_PIN, LOW);
   digitalWrite(RGB_LED_EN, HIGH);
@@ -113,11 +155,16 @@ void setup() {
   ret |= register_event_callback(VOL_M_SHORT_PRESS, volume_decrease, NULL);
   ret |= register_event_callback(PAIR_SHORT_PRESS, select_action, NULL);
   ret |= register_event_callback(PAIR_LONG_PRESS, pair_action, NULL);
+  ret |= register_event_callback(CHARGE_START, charge_start_action, NULL);
+  ret |= register_event_callback(CHARGE_STOP, charge_stop_action, NULL);
 
   if (ret != 0) {
     Serial.println("Error: Failed to register event callbacks");
     init_success = false;
   }
+  pinMode(CHG_STAT_PIN, INPUT_PULLUP);
+  attachInterrupt(digitalPinToInterrupt(CHG_STAT_PIN), chg_stat_isr, CHANGE);
+
 
   if (init_buttons() < 0) {
     Serial.println("Error: Failed to init button handlers");
@@ -155,6 +202,11 @@ void setup() {
 
   if (init_fft_task() < 0) {
     Serial.println("Failed it start FFT task");
+    init_success = false;
+  }
+
+  if (!maxlipo.begin()) {
+    Serial.println(F("Error: Unable to init MAX17048"));
     init_success = false;
   }
 
@@ -292,6 +344,9 @@ void timer_thread_task(void *pvParameters)
   while (1) {
     //Serial.println("Hello from task 1");
     log_inf("Hello from task 1");
+    float voltage = maxlipo.cellVoltage();
+    float soc = maxlipo.cellPercent();
+    log_inf("Battery Voltage: %0.2f, Battery SOC: %0.2f %%", voltage, soc);
     digitalWrite(RGB_LED_EN, HIGH);
     rgb_led_cycle(NULL);
     delay(1000);
