@@ -18,6 +18,7 @@
 #include "src/Buttons.h"
 #include "src/Events.h"
 #include "src/Logging.h"
+#include "src/Font.h"
 
 #define I2C_BUS_SCAN_MAX 16
 
@@ -31,9 +32,6 @@ Adafruit_MAX17048 maxlipo;
 // Function prototypes
 void snake_animation(void *ctx);
 void rgb_led_cycle(void *ctx);
-
-//void draw_equalizer(float *freq_data, int N);
-
 
 void fft_task(void *pvParameters);
 void display_task(void *pvParameters);
@@ -81,6 +79,8 @@ static void pair_action(void *ctx)
   log_inf("Pair Button Pressed");
 }
 
+volatile int start_cnt = 0;
+volatile int stop_cnt = 0;
 volatile bool start_busy = false;
 volatile bool stop_busy = false;
 static void chg_stat_isr()
@@ -88,10 +88,12 @@ static void chg_stat_isr()
   if (digitalRead(CHG_STAT_PIN)) {
     if (!stop_busy)
       push_event(CHARGE_STOP, true);
+      stop_cnt++;
   }
   else {
     if (!start_busy)
       push_event(CHARGE_START, true);
+      start_cnt++;
   }
 }
 static void charge_start_action(void *ctx)
@@ -137,6 +139,8 @@ void setup() {
   digitalWrite(AMP_SD_PIN, LOW);
   digitalWrite(RGB_LED_EN, HIGH);
 
+  pinMode(CHG_STAT_PIN, INPUT_PULLUP);
+
   if (init_display_task() < 0) {
     Serial.println("Error: Failed to start Display task");
     init_success = false;
@@ -162,8 +166,6 @@ void setup() {
     Serial.println("Error: Failed to register event callbacks");
     init_success = false;
   }
-  pinMode(CHG_STAT_PIN, INPUT_PULLUP);
-  attachInterrupt(digitalPinToInterrupt(CHG_STAT_PIN), chg_stat_isr, CHANGE);
 
 
   if (init_buttons() < 0) {
@@ -171,10 +173,12 @@ void setup() {
     init_success = false;
   }
 
-  for (int i=0; i<8; i++) {
-    double_buffer.setPixel(i, i);
+  for (int i=10; i >= 0; i--) {
+    double_buffer.clear();
+    draw_int(i, 30, 2, &double_buffer);
+    double_buffer.update();
+    delay(250);
   }
-  double_buffer.update();
 
   FastLED.addLeds<NEOPIXEL,RGB_LED_DATA>(rgb_led, 1);
   rgb_led[0] = CRGB::Blue;
@@ -224,6 +228,8 @@ void setup() {
   a2dp_sink.start("DevBoard_v0");
   a2dp_sink.set_volume(volume_level * VOLUME_SCALE);
   a2dp_sink.set_stream_reader(read_data_stream);
+
+  attachInterrupt(digitalPinToInterrupt(CHG_STAT_PIN), chg_stat_isr, CHANGE);
 }
 
 void loop() {
@@ -307,46 +313,21 @@ void rgb_led_cycle(void *ctx)
   FastLED.show();
 }
 
-/*
-// NOTE: Don't delete with other stuff you moved to FFT_task.cpp
-void draw_equalizer(float *freq_data, int N) {
-  int buckets[16] = {0};
-  int max_height = 8;
-  
-  for (int i=0; i<N; i+=2) {
-    int j;
-    bool valid = false;
-    for (j=0; j<16; j++) {
-      if (freq_data[i] < ranges[j]) {
-        valid = true;
-        break;
-      }
-    }
-    if (valid) {
-      float normal = ((freq_data[i+1]/10000)*2/FFT_N) / 0.2f;
-      buckets[j] = (int)(max_height * normal);
-    }
-  }
-
-  double_buffer.clear();
-  for (int i=0; i<16; i++) {
-    for (int j=0; j<=buckets[i]; j++) {
-      double_buffer.setPixel(i, j);
-    }
-  }
-  double_buffer.update();
-  
-}
-*/
 void timer_thread_task(void *pvParameters)
 {
   //update_timer_threads();
   while (1) {
-    //Serial.println("Hello from task 1");
     log_inf("Hello from task 1");
+    /*
+    double_buffer.clear();
+    draw_int(start_cnt, 10, 2, &double_buffer);
+    draw_int(stop_cnt, 30, 2, &double_buffer);
+    double_buffer.update();
+    */
     float voltage = maxlipo.cellVoltage();
     float soc = maxlipo.cellPercent();
     log_inf("Battery Voltage: %0.2f, Battery SOC: %0.2f %%", voltage, soc);
+    log_inf("Audio Connected: %d", a2dp_sink.is_connected());
     digitalWrite(RGB_LED_EN, HIGH);
     rgb_led_cycle(NULL);
     delay(1000);
