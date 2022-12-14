@@ -22,11 +22,11 @@ struct fft_double_buffer
 // File Globals
 static SemaphoreHandle_t xDataReadySem;
 static const uint16_t ranges[FFT_BUCKETS] = {
-        100, 141, 185, 233, 285, 343, 406, 476, 553,
+        50, 100, 141, 185, 233, 285, 343, 406, 476, 553,
         637, 729, 829, 937, 1053, 1179, 1314, 1459,
         1614, 1778, 1954, 2140, 2336, 2544, 2764, 2995,
         3238, 3493, 3760, 4040, 4333, 4638, 4957, 5289,
-        5635, 5994, 6367, 6754, 7156, 7572, 8002,
+        5635, 5994, 6367, 6754, 7156, 7572, //8002,
 };
 static const uint16_t MAX_FREQ = 8447;
 static float fft_output[FFT_N];
@@ -78,6 +78,7 @@ void read_data_stream(const uint8_t *data, uint32_t length)
             if (xSemaphoreGive(xDataReadySem) != pdTRUE)
             {
                 // Failed to give semaphore
+                log_err("Failed to give semaphore");
             }
         }
     }
@@ -225,6 +226,8 @@ void process_fft()
     }
     double_buffer.update();
     cnt++;
+    int32_t delta = millis() - start_time;
+    log_inf("Delta: %d", delta);
 }
 
 void update_freq_array(float *freq_data, int N, float freq, float mag)
