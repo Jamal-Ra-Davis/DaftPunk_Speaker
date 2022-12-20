@@ -8,6 +8,7 @@
 // File Globals
 static uint8_t sr_buffer[SR_CNT] = {0x00};
 static uint8_t row_idx = 0;
+static TaskHandle_t xdisplay_task = NULL;
 
 // Function Prototypes
 static void display_task(void *pvParameters);
@@ -29,10 +30,13 @@ int init_display_task()
         DISPLAY_TASK_STACK_SIZE,
         NULL,
         DISPLAY_TASK_PRIORITY,
-        NULL);
+        &xdisplay_task);
     return 0;
 }
-
+TaskHandle_t display_task_handle()
+{
+    return xdisplay_task;
+}
 // Private Functions
 static void display_task(void *pvParameters)
 {

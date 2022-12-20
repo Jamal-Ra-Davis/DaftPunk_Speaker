@@ -10,6 +10,8 @@
 #define MAX_FFT_MAG 2000000.0
 #define FFT_BUCKETS 40
 
+// TODO: Investigate why audio stream stops sometimes. Check if it's due to FFT processing/display
+
 struct fft_double_buffer
 {
     float buf0[FFT_N];
@@ -33,6 +35,7 @@ static float fft_output[FFT_N];
 static float fft_input[FFT_N];
 static struct fft_double_buffer fft_buf;
 static fft_config_t *real_fft_plan;
+static TaskHandle_t xfft_task = NULL;
 
 // Function Prototypes
 static void fft_task(void *pvParameters);
@@ -58,12 +61,15 @@ int init_fft_task()
         FFT_TASK_STACK_SIZE,
         NULL,
         FFT_TASK_PRIORITY, // priority
-        NULL);
+        &xfft_task);
     return 0;
 }
 
 void read_data_stream(const uint8_t *data, uint32_t length)
 {
+    if (data == NULL || length == 0) {
+        return;
+    }
     // Odd samples are left channel, even samples are right channel
     int16_t *samples = (int16_t *)data;
     uint32_t sample_count = length / 2;
@@ -84,7 +90,12 @@ void read_data_stream(const uint8_t *data, uint32_t length)
     }
 }
 
-// Priavte Functions
+TaskHandle_t fft_task_handle()
+{
+    return xfft_task;
+}
+
+// Private Functions
 static void init_fft_buffer(struct fft_double_buffer *fft_buf)
 {
     fft_buf->widx = 0;
@@ -136,24 +147,8 @@ void process_fft()
 
     int bucket_idx = 0;
     fft_execute(real_fft_plan);
-    /*
-    bool pair_pressed = pair_press;
-    if (pair_press)
-    {
-        pair_press = false;
-    }
-    */
     for (int k = 1; k < real_fft_plan->size / 2; k++)
     {
-        /*
-        if (pair_pressed)
-        {
-            Serial.print(real_fft_plan->output[2 * k]);
-            Serial.print(", ");
-            Serial.println(real_fft_plan->output[2 * k + 1]);
-        }
-        */
-
         /*The real part of a magnitude at a frequency is
           followed by the corresponding imaginary part in the output*/
         float mag = sqrt(pow(real_fft_plan->output[2 * k], 2) + pow(real_fft_plan->output[2 * k + 1], 2));

@@ -324,6 +324,21 @@ void timer_thread_task(void *pvParameters)
     draw_int(stop_cnt, 30, 2, &double_buffer);
     double_buffer.update();
     */
+
+    TaskHandle_t fft_task = fft_task_handle();
+    TaskHandle_t display_task = display_task_handle();
+    TaskHandle_t event_task = event_task_handle();
+    TaskHandle_t logger_task = logger_task_handle();
+    UBaseType_t fft_task_wm = uxTaskGetStackHighWaterMark(fft_task);
+    UBaseType_t display_task_wm = uxTaskGetStackHighWaterMark(display_task);
+    UBaseType_t event_task_wm = uxTaskGetStackHighWaterMark(event_task);
+    UBaseType_t logger_task_wm = uxTaskGetStackHighWaterMark(logger_task);
+
+    log_inf("fft_task watermark: %d", (int)fft_task_wm);
+    log_inf("display_task watermark: %d", (int)display_task_wm);
+    log_inf("event_task watermark: %d", (int)event_task_wm);
+    log_inf("loggger_task watermark: %d", (int)logger_task_wm);
+
     float voltage = maxlipo.cellVoltage();
     float soc = maxlipo.cellPercent();
     log_inf("Battery Voltage: %0.2f, Battery SOC: %0.2f %%", voltage, soc);

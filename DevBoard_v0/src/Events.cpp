@@ -17,6 +17,7 @@ struct event_callback_data
 static struct event_callback_data event_callbacks[NUM_EVENTS];
 static QueueHandle_t event_queue = NULL;
 static SemaphoreHandle_t event_mutex = NULL;
+static TaskHandle_t xevent_task = NULL;
 
 // Function Prototypes
 static void event_manager_task(void *pvParameters);
@@ -50,7 +51,7 @@ int init_event_manager()
         EVENT_MANAGER_TASK_STACK_SIZE,
         NULL,
         EVENT_MANAGER_TASK_PRIORITY,
-        NULL);
+        &xevent_task);
     return 0;
 }
 int register_event_callback(system_event_t event, event_callback_t cb, void *ctx)
@@ -128,6 +129,10 @@ int push_event(system_event_t event, bool isr)
     }
 
     return (ret == pdTRUE) ? 0 : -1;
+}
+TaskHandle_t event_task_handle()
+{
+    return xevent_task;
 }
 
 // Private Functions

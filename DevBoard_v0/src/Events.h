@@ -19,3 +19,4 @@ int register_event_callback(system_event_t event, event_callback_t cb, void *ctx
 int unregister_event_callback(system_event_t event, event_callback_t cb);
 bool event_callback_registered(system_event_t event);
 int push_event(system_event_t event, bool isr);
+TaskHandle_t event_task_handle();

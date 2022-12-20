@@ -32,6 +32,7 @@ static SemaphoreHandle_t log_mutex = NULL;
 static QueueHandle_t log_queue = NULL;
 static log_level_t log_level = LOG_INF;
 static int dropped_messages = 0;
+static TaskHandle_t xlogger_task = NULL;
 
 static void logger_task(void *pvParameters);
 static int _log(log_level_t level, bool isr, const char *fmt, va_list args);
@@ -59,7 +60,7 @@ int init_logger()
         LOGGER_TASK_SIZE,
         NULL,
         LOGGER_TASK_PRIORITY,
-        NULL);
+        &xlogger_task);
     return 0;
 }
 
@@ -133,6 +134,10 @@ int log_dbg_isr(const char *fmt, ...)
     va_start(args, fmt);
     va_end(args);
     return _log(LOG_DBG, true, fmt, args);
+}
+TaskHandle_t logger_task_handle()
+{
+    return xlogger_task;
 }
 
 // Private Functions
