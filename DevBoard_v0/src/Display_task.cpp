@@ -3,7 +3,7 @@
 #include "FrameBuffer.h"
 #include "sr_driver.h"
 
-#define DISPLAY_TASK_STACK_SIZE 4096
+#define DISPLAY_TASK_STACK_SIZE 1024
 
 // File Globals
 static uint8_t sr_buffer[SR_CNT] = {0x00};
