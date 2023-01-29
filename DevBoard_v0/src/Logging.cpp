@@ -10,6 +10,8 @@
 #define SCRATCH_BUF_SIZE 64
 #define MUTEX_DELAY 100
 
+#define SHOW_PENDING_LOG_NUM 0
+
 struct log_message
 {
     bool start;
@@ -152,6 +154,11 @@ int _log(log_level_t level, bool isr, const char *fmt, va_list args)
         return -1;
     }
 
+#if SHOW_PENDING_LOG_NUM
+    UBaseType_t num_messages = uxQueueMessagesWaiting(log_queue);
+    Serial.print("Pending Queue: ");
+    Serial.println((int)num_messages);
+#endif
     if (isr)
     {
 

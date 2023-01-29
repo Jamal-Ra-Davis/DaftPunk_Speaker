@@ -14,6 +14,7 @@
 
 #include "src/global_defines.h"
 #include "src/FFT_task.h"
+#include "src/cli_task.h"
 #include "src/Display_task.h"
 #include "src/Buttons.h"
 #include "src/Events.h"
@@ -28,6 +29,7 @@
 BluetoothA2DPSink a2dp_sink;
 CRGBArray<1> rgb_led;
 Adafruit_MAX17048 maxlipo;
+bool display_stack_wm = false;
 
 // Function prototypes
 void snake_animation(void *ctx);
@@ -46,7 +48,7 @@ struct pos body[BODY_LEN];
 
 static const uint8_t MAX_VOLUME_LEVEL = 8;
 static const uint8_t VOLUME_SCALE = 16;
-static int8_t volume_level = 2;
+int8_t volume_level = 2;
 static volatile bool pair_press = false;
 
 static void volume_increase(void *ctx)
@@ -214,6 +216,11 @@ void setup() {
     init_success = false;
   }
 
+  if (init_cli_task() < 0) {
+    Serial.println("Failed to init CLI");
+    init_success = false;
+  }
+
   // Create FreeRTOS Tasks
   xTaskCreate(
     timer_thread_task,
@@ -315,35 +322,48 @@ void rgb_led_cycle(void *ctx)
 
 void timer_thread_task(void *pvParameters)
 {
+  static int cnt = 0;
   //update_timer_threads();
   while (1) {
-    log_inf("Hello from task 1");
-    /*
-    double_buffer.clear();
-    draw_int(start_cnt, 10, 2, &double_buffer);
-    draw_int(stop_cnt, 30, 2, &double_buffer);
-    double_buffer.update();
-    */
-
-    TaskHandle_t fft_task = fft_task_handle();
-    TaskHandle_t display_task = display_task_handle();
-    TaskHandle_t event_task = event_task_handle();
-    TaskHandle_t logger_task = logger_task_handle();
-    UBaseType_t fft_task_wm = uxTaskGetStackHighWaterMark(fft_task);
-    UBaseType_t display_task_wm = uxTaskGetStackHighWaterMark(display_task);
-    UBaseType_t event_task_wm = uxTaskGetStackHighWaterMark(event_task);
-    UBaseType_t logger_task_wm = uxTaskGetStackHighWaterMark(logger_task);
-
-    log_inf("fft_task watermark: %d", (int)fft_task_wm);
-    log_inf("display_task watermark: %d", (int)display_task_wm);
-    log_inf("event_task watermark: %d", (int)event_task_wm);
-    log_inf("loggger_task watermark: %d", (int)logger_task_wm);
-
+    //log_inf("Hello from task 1");
+    
+    
     float voltage = maxlipo.cellVoltage();
     float soc = maxlipo.cellPercent();
+    /*
     log_inf("Battery Voltage: %0.2f, Battery SOC: %0.2f %%", voltage, soc);
     log_inf("Audio Connected: %d", a2dp_sink.is_connected());
-    digitalWrite(RGB_LED_EN, HIGH);
+    */
+
+    double_buffer.clear();
+    //draw_int(start_cnt, 10, 2, &double_buffer);
+    //draw_int(stop_cnt, 30, 2, &double_buffer);
+    //draw_int(cnt++, 30, 2, &double_buffer);
+    draw_int((int)soc, 30, 2, &double_buffer);
+    double_buffer.update();
+    
+    if (display_stack_wm) {
+      TaskHandle_t fft_task = fft_task_handle();
+      TaskHandle_t display_task = display_task_handle();
+      TaskHandle_t event_task = event_task_handle();
+      TaskHandle_t logger_task = logger_task_handle();
+      TaskHandle_t cli_task = cli_task_handle();
+      UBaseType_t fft_task_wm = uxTaskGetStackHighWaterMark(fft_task);
+      UBaseType_t display_task_wm = uxTaskGetStackHighWaterMark(display_task);
+      UBaseType_t event_task_wm = uxTaskGetStackHighWaterMark(event_task);
+      UBaseType_t logger_task_wm = uxTaskGetStackHighWaterMark(logger_task);
+      UBaseType_t cli_task_wm = uxTaskGetStackHighWaterMark(cli_task);
+      UBaseType_t stack_task_wm = uxTaskGetStackHighWaterMark(NULL);
+
+      log_inf("fft_task watermark: %d", (int)fft_task_wm);
+      log_inf("display_task watermark: %d", (int)display_task_wm);
+      log_inf("event_task watermark: %d", (int)event_task_wm);
+      log_inf("loggger_task watermark: %d", (int)logger_task_wm);
+      log_inf("cli_task watermark: %d", (int)cli_task_wm);
+      log_inf("stack_task watermark: %d", (int)stack_task_wm);
+    }
+
+    
     rgb_led_cycle(NULL);
     delay(1000);
   }
