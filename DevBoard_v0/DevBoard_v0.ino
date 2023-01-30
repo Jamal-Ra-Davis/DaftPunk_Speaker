@@ -20,8 +20,10 @@
 #include "src/Events.h"
 #include "src/Logging.h"
 #include "src/Font.h"
+#include "src/Volume.h"
 
 #define I2C_BUS_SCAN_MAX 16
+#define TIMER_TASK_STACK_SIZE 3072
 
 // Data struct definitions
 
@@ -35,8 +37,6 @@ bool display_stack_wm = false;
 void snake_animation(void *ctx);
 void rgb_led_cycle(void *ctx);
 
-void fft_task(void *pvParameters);
-void display_task(void *pvParameters);
 void timer_thread_task(void *pvParameters);
 
 struct pos {
@@ -51,26 +51,6 @@ static const uint8_t VOLUME_SCALE = 16;
 int8_t volume_level = 2;
 static volatile bool pair_press = false;
 
-static void volume_increase(void *ctx)
-{
-  log_inf("Volume Increase Pressed");
-  volume_level++;
-  if (volume_level > MAX_VOLUME_LEVEL)
-  {
-    volume_level = MAX_VOLUME_LEVEL;
-  }
-  a2dp_sink.set_volume(volume_level * VOLUME_SCALE);
-}
-static void volume_decrease(void *ctx)
-{
-  log_inf("Volume Decrease Pressed");
-  volume_level--;
-  if (volume_level < 0)
-  {
-    volume_level = 0;
-  }
-  a2dp_sink.set_volume(volume_level * VOLUME_SCALE);
-}
 static void select_action(void *ctx)
 {
   log_inf("Select button pressed");
@@ -157,8 +137,9 @@ void setup() {
     Serial.println("Error: Failed to init event manager");
     init_success = false;
   }
-  ret |= register_event_callback(VOL_P_SHORT_PRESS, volume_increase, NULL);
-  ret |= register_event_callback(VOL_M_SHORT_PRESS, volume_decrease, NULL);
+  
+  ret |= register_event_callback(VOL_P_SHORT_PRESS, volume_increase_cb, NULL);
+  ret |= register_event_callback(VOL_M_SHORT_PRESS, volume_decrease_cb, NULL);
   ret |= register_event_callback(PAIR_SHORT_PRESS, select_action, NULL);
   ret |= register_event_callback(PAIR_LONG_PRESS, pair_action, NULL);
   ret |= register_event_callback(CHARGE_START, charge_start_action, NULL);
@@ -215,7 +196,7 @@ void setup() {
     Serial.println(F("Error: Unable to init MAX17048"));
     init_success = false;
   }
-
+  
   if (init_cli_task() < 0) {
     Serial.println("Failed to init CLI");
     init_success = false;
@@ -225,7 +206,7 @@ void setup() {
   xTaskCreate(
     timer_thread_task,
     "Timer_Thread_Task",   // A name just for humans
-    4096,        // Stack size
+    TIMER_TASK_STACK_SIZE,        // Stack size
     NULL,
     TIMER_THREAD_TASK_PRIORITY,          // priority
     NULL
@@ -233,10 +214,12 @@ void setup() {
 
   // Init Audio
   a2dp_sink.start("DevBoard_v0");
-  a2dp_sink.set_volume(volume_level * VOLUME_SCALE);
+  volume_init();
   a2dp_sink.set_stream_reader(read_data_stream);
 
   attachInterrupt(digitalPinToInterrupt(CHG_STAT_PIN), chg_stat_isr, CHANGE);
+  volatile size_t xFreeStackSpace = xPortGetFreeHeapSize();
+  log_inf("Free Heap Size = %d", xFreeStackSpace);
 }
 
 void loop() {
@@ -327,21 +310,26 @@ void timer_thread_task(void *pvParameters)
   while (1) {
     //log_inf("Hello from task 1");
     
-    
-    float voltage = maxlipo.cellVoltage();
+    /*
+    //float voltage = maxlipo.cellVoltage();
     float soc = maxlipo.cellPercent();
+    uint16_t ic_version = maxlipo.getICversion();
+    log_inf("IC Version = 0x%04X", ic_version);
+    */
     /*
     log_inf("Battery Voltage: %0.2f, Battery SOC: %0.2f %%", voltage, soc);
     log_inf("Audio Connected: %d", a2dp_sink.is_connected());
     */
 
+    /*
     double_buffer.clear();
     //draw_int(start_cnt, 10, 2, &double_buffer);
     //draw_int(stop_cnt, 30, 2, &double_buffer);
     //draw_int(cnt++, 30, 2, &double_buffer);
     draw_int((int)soc, 30, 2, &double_buffer);
     double_buffer.update();
-    
+    */
+
     if (display_stack_wm) {
       TaskHandle_t fft_task = fft_task_handle();
       TaskHandle_t display_task = display_task_handle();
@@ -363,7 +351,6 @@ void timer_thread_task(void *pvParameters)
       log_inf("stack_task watermark: %d", (int)stack_task_wm);
     }
 
-    
     rgb_led_cycle(NULL);
     delay(1000);
   }
