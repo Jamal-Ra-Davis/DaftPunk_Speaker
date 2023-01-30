@@ -22,11 +22,11 @@
 
 // Task Priorities
 #define LOGGER_TASK_PRIORITY 1
+#define CLI_TASK_PRIORITY 1
 #define TIMER_THREAD_TASK_PRIORITY 2
 #define FFT_TASK_PRIORITY 3
 #define EVENT_MANAGER_TASK_PRIORITY 4
 #define DISPLAY_TASK_PRIORITY 5
-#define CLI_TASK_PRIORITY 6
 
 // Task Helpers
 #define MS_TO_TICKS(x) (x / portTICK_PERIOD_MS)

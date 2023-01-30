@@ -3,10 +3,11 @@
 #include "global_defines.h"
 #include "Logging.h"
 #include "I2C_Helper.h"
+#include "Volume.h"
 #include <SimpleCLI.h>
 #include <Adafruit_MAX1704X.h>
 
-#define CLI_TASK_STACK_SIZE 4096
+#define CLI_TASK_STACK_SIZE 3072
 
 enum CLI_COMMANDS {
     HELP_CMD, 
@@ -27,6 +28,7 @@ enum CLI_COMMANDS {
     BATT_GET_ALERT_CMD,
     BATT_SET_ALERT_CMD,
     RGB_LED_SET_CMD,
+    LOG_LEVEL_SET_CMD,
     NUM_CLI_COMMANDS,
 };
 
@@ -210,6 +212,9 @@ static void cli_task(void *pvParameters)
                 cli.parse(input);
             }
         }
+        else {
+            delay(100);
+        }
     }
 }
 static void error_cb(cmd_error* e) {
@@ -244,10 +249,11 @@ static void stack_display_cb(cmd* c) {
 }
 static void i2c_read_cb(cmd* c)
 {
+    log_inf("i2c_read");
     Command cmd(c);
     bool valid_inputs = true;
     uint8_t rbuf[16];
-    log_inf("i2c_read");
+    
     //address
     Argument addr_arg = cmd.getArgument("ADDR");
     int32_t addr_val;
@@ -297,6 +303,58 @@ static void i2c_read_cb(cmd* c)
 static void i2c_write_cb(cmd* c)
 {
     log_inf("i2c_write");
+    Command cmd(c);
+    bool valid_inputs = true;
+
+    //address
+    Argument addr_arg = cmd.getArgument("ADDR");
+    int32_t addr_val;
+
+    //wbuf (reg addr)
+    Argument reg_arg = cmd.getArgument("REG");
+    int32_t reg_val;
+
+    //Write value
+    Argument val_arg = cmd.getArgument("VAL");
+    int32_t val_val;
+    int byte_cnt = 0;
+
+    if (parse_integer_arg(&addr_arg, &addr_val) < 0) {
+        log_err("Failed to parse i2c address");
+        valid_inputs = false;
+    }
+    if (parse_integer_arg(&reg_arg, &reg_val) < 0) {
+        log_err("Failed to parse i2c reg");
+        valid_inputs = false;
+    }
+    if (parse_integer_arg(&val_arg, &val_val) < 0) {
+        log_err("Failed to parse i2c read length");
+        valid_inputs = false;
+    }
+    if (val_val < 0) {
+        valid_inputs = false;
+    }
+
+    if (!valid_inputs) {
+        return;
+    }
+
+    if (val_val > 0) {
+        int32_t _val = val_val;
+        while (_val > 0) {
+            _val >>= 8;
+            byte_cnt++;
+        }
+    }
+    else {
+        byte_cnt = 1;
+    }
+    
+    uint8_t _reg = (uint8_t)reg_val;
+    if (i2c_write((uint8_t)addr_val, (uint8_t*)&val_val, byte_cnt) < 0) {
+        log_err("Failed to perform i2c write to device 0x%02X at register 0x%02X", (uint8_t)addr_val, _reg);
+        return;
+    }
 }
 static void i2c_bus_scan_cb(cmd* c)
 {
@@ -319,18 +377,115 @@ static void i2c_bus_scan_cb(cmd* c)
 static void mem_read_cb(cmd* c)
 {
     log_inf("mem_read");
+    Command cmd(c);
+    bool valid_inputs = true;
+
+    //address
+    Argument addr_arg = cmd.getArgument("ADDR");
+    int32_t addr_val;
+
+    if (parse_integer_arg(&addr_arg, &addr_val) < 0) {
+        log_err("Failed to parse memory address");
+        valid_inputs = false;
+    }
+    if (addr_val < 0) {
+        valid_inputs = false;
+    }
+
+    if (!valid_inputs) {
+        return;
+    }
+
+    int32_t mem_val = *((int32_t*)addr_val);
+    log_inf("MEM[0x%08X] = 0x%08X (%d)", mem_val, mem_val);
 }
 static void mem_write_cb(cmd* c)
 {
     log_inf("mem_write");
+    Command cmd(c);
+    bool valid_inputs = true;
+
+    //address
+    Argument addr_arg = cmd.getArgument("ADDR");
+    int32_t addr_val;
+
+    //Write value
+    Argument val_arg = cmd.getArgument("VAL");
+    int32_t val_val;
+
+    if (parse_integer_arg(&addr_arg, &addr_val) < 0) {
+        log_err("Failed to parse memory address");
+        valid_inputs = false;
+    }
+    if (parse_integer_arg(&val_arg, &val_val) < 0) {
+        log_err("Failed to parse memory value");
+        valid_inputs = false;
+    }
+    if (addr_val < 0) {
+        valid_inputs = false;
+    }
+
+    if (!valid_inputs) {
+        return;
+    }
+
+    *((int32_t*)addr_val) = val_val;
 }
 static void gpio_read_cb(cmd* c)
 {
     log_inf("gpio_read");
+    Command cmd(c);
+    bool valid_inputs = true;
+
+    //address
+    Argument pin_arg = cmd.getArgument("PIN");
+    int32_t pin_val;
+
+    if (parse_integer_arg(&pin_arg, &pin_val) < 0) {
+        log_err("Failed to parse gpio pin");
+        valid_inputs = false;
+    }
+    if (pin_val < 0) {
+        valid_inputs = false;
+    }
+
+    if (!valid_inputs) {
+        return;
+    }
+
+    log_inf("GPIO[%d] =%d", pin_val, digitalRead(pin_val));
 }
 static void gpio_write_cb(cmd* c)
 {
     log_inf("gpio_write");
+    Command cmd(c);
+    bool valid_inputs = true;
+
+    //address
+    Argument pin_arg = cmd.getArgument("PIN");
+    int32_t pin_val;
+
+    //Write value
+    Argument val_arg = cmd.getArgument("VAL");
+    int32_t val_val;
+
+    if (parse_integer_arg(&pin_arg, &pin_val) < 0) {
+        log_err("Failed to parse gpio pin");
+        valid_inputs = false;
+    }
+    if (parse_integer_arg(&val_arg, &val_val) < 0) {
+        log_err("Failed to parse pin setting value");
+        valid_inputs = false;
+    }
+    if (pin_val < 0 || val_val < 0) {
+        valid_inputs = false;
+    }
+
+    if (!valid_inputs) {
+        return;
+    }
+
+    digitalWrite(pin_val, (bool)val_val);
 }
 static void task_enable_cb(cmd* c)
 {
@@ -343,11 +498,28 @@ static void get_enabled_tasks_cb(cmd* c)
 static void vol_set_cb(cmd* c)
 {
     log_inf("vol_set");
+    Command cmd(c);
+    bool valid_inputs = true;
+
+    //address
+    Argument vol_arg = cmd.getArgument("VOL");
+    int32_t vol_val;
+
+    if (parse_integer_arg(&vol_arg, &vol_val) < 0) {
+        log_err("Failed to parse volume value");
+        return;
+    }
+    
+    log_dbg("Volume Val = %d", vol_val);
+    if (volume_set((int8_t)vol_val) < 0) {
+        log_err("Failed to set volume");
+        return;
+    }
 }
 static void vol_get_cb(cmd* c)
 {
     log_inf("vol_get");
-    log_inf("Volume Level: %d", volume_level);
+    log_inf("Volume Level: %d", volume_get());
 }
 static void batt_get_status_cb(cmd* c)
 {
