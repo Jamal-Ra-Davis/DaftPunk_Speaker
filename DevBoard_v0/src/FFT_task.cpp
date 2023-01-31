@@ -84,7 +84,7 @@ void read_data_stream(const uint8_t *data, uint32_t length)
             if (xSemaphoreGive(xDataReadySem) != pdTRUE)
             {
                 // Failed to give semaphore
-                log_err("Failed to give semaphore");
+                log_err_isr("Failed to give semaphore");
             }
         }
     }
