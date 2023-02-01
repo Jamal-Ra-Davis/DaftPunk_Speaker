@@ -2,7 +2,7 @@
 #include "Logging.h"
 #include "global_defines.h"
 
-#define LOGGER_TASK_SIZE 3072
+#define LOGGER_TASK_SIZE 2304
 #define MAX_LOG_CHUNK_LEN 32
 #define MAX_LOG_LEN 256
 #define MAX_LOGS 64

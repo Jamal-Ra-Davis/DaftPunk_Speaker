@@ -4,7 +4,7 @@
 #include "Logging.h"
 
 #define MAX_EVENTS 10
-#define EVENT_MANAGER_TASK_STACK_SIZE 3072
+#define EVENT_MANAGER_TASK_STACK_SIZE 2304
 #define MUTEX_DELAY 100
 
 struct event_callback_data

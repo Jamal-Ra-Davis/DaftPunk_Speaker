@@ -23,7 +23,7 @@
 #include "src/Volume.h"
 
 #define I2C_BUS_SCAN_MAX 16
-#define TIMER_TASK_STACK_SIZE 3072
+#define TIMER_TASK_STACK_SIZE 2560
 
 // Data struct definitions
 
@@ -220,6 +220,7 @@ void setup() {
   attachInterrupt(digitalPinToInterrupt(CHG_STAT_PIN), chg_stat_isr, CHANGE);
   volatile size_t xFreeStackSpace = xPortGetFreeHeapSize();
   log_inf("Free Heap Size = %d", xFreeStackSpace);
+  log_inf("BluetoothA2DPSink size = %d", sizeof(BluetoothA2DPSink));
 }
 
 void loop() {
@@ -342,13 +343,15 @@ void timer_thread_task(void *pvParameters)
       UBaseType_t logger_task_wm = uxTaskGetStackHighWaterMark(logger_task);
       UBaseType_t cli_task_wm = uxTaskGetStackHighWaterMark(cli_task);
       UBaseType_t stack_task_wm = uxTaskGetStackHighWaterMark(NULL);
+      volatile size_t xFreeStackSpace = xPortGetFreeHeapSize();
 
       log_inf("fft_task watermark: %d", (int)fft_task_wm);
       log_inf("display_task watermark: %d", (int)display_task_wm);
       log_inf("event_task watermark: %d", (int)event_task_wm);
-      log_inf("loggger_task watermark: %d", (int)logger_task_wm);
+      log_inf("logger_task watermark: %d", (int)logger_task_wm);
       log_inf("cli_task watermark: %d", (int)cli_task_wm);
       log_inf("stack_task watermark: %d", (int)stack_task_wm);
+      log_inf("Free Heap Size = %d\n", xFreeStackSpace);
     }
 
     rgb_led_cycle(NULL);

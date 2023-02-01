@@ -4,7 +4,7 @@
 #include "FrameBuffer.h"
 #include "Logging.h"
 
-#define FFT_TASK_STACK_SIZE 6144
+#define FFT_TASK_STACK_SIZE 3072
 #define FFT_N 2048
 #define TOTAL_TIME 0.0464399
 #define MAX_FFT_MAG 2000000.0
