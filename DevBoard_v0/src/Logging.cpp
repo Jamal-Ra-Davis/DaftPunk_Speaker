@@ -7,21 +7,41 @@
 #define MAX_LOG_LEN 256
 #define MAX_LOGS 64
 #define MAX_TASK_NAME_LEN 24
-#define SCRATCH_BUF_SIZE 64
+#define SCRATCH_BUF_SIZE MAX_LOG_LEN//64
 #define MUTEX_DELAY 100
 
 #define SHOW_PENDING_LOG_NUM 0
 
-struct log_message
-{
-    bool start;
-    bool end;
+typedef enum {LOG_TYPE_REQ, LOG_TYPE_DATA, LOG_TYPE_DATA_ALT} log_message_type_t;
+struct log_request {
+    uint32_t ts;
+    log_level_t level; 
+    const char *fmt;
+    va_list args;
+};
+struct log_data {
     uint32_t ts;
     log_level_t level;
+    bool start;
+    bool end;
 #if (configUSE_TRACE_FACILITY == 1)
     char task_name[MAX_TASK_NAME_LEN];
 #endif
     char buf[MAX_LOG_CHUNK_LEN];
+};
+struct log_data_alt {
+    uint32_t ts;
+    log_level_t level;
+    char *buf;
+};
+struct log_message
+{
+    log_message_type_t msg_type;
+    union { 
+        struct log_request req;
+        struct log_data data;
+        struct log_data_alt data_alt;
+    };
 };
 
 static const char *LOG_LEVEL_NAMES[NUM_LOG_LEVELS] = {
@@ -38,6 +58,9 @@ static TaskHandle_t xlogger_task = NULL;
 
 static void logger_task(void *pvParameters);
 static int _log(log_level_t level, bool isr, const char *fmt, va_list args);
+static int _log_alt(log_level_t level, bool isr, const char *fmt, va_list args);
+static int log_request(log_level_t level, bool isr, const char *fmt, va_list args);
+static int handle_log_data(struct log_data *data, char *scratch_buf);
 
 // Public functions
 int init_logger()
@@ -86,56 +109,56 @@ int log_err(const char *fmt, ...)
     va_list args;
     va_start(args, fmt);
     va_end(args);
-    return _log(LOG_ERR, false, fmt, args);
+    return _log_alt(LOG_ERR, false, fmt, args);
 }
 int log_wrn(const char *fmt, ...)
 {
     va_list args;
     va_start(args, fmt);
     va_end(args);
-    return _log(LOG_WRN, false, fmt, args);
+    return _log_alt(LOG_WRN, false, fmt, args);
 }
 int log_inf(const char *fmt, ...)
 {
     va_list args;
     va_start(args, fmt);
     va_end(args);
-    return _log(LOG_INF, false, fmt, args);
+    return _log_alt(LOG_INF, false, fmt, args);
 }
 int log_dbg(const char *fmt, ...)
 {
     va_list args;
     va_start(args, fmt);
     va_end(args);
-    return _log(LOG_DBG, false, fmt, args);
+    return _log_alt(LOG_DBG, false, fmt, args);
 }
 int log_err_isr(const char *fmt, ...)
 {
     va_list args;
     va_start(args, fmt);
     va_end(args);
-    return _log(LOG_ERR, true, fmt, args);
+    return _log_alt(LOG_ERR, true, fmt, args);
 }
 int log_wrn_isr(const char *fmt, ...)
 {
     va_list args;
     va_start(args, fmt);
     va_end(args);
-    return _log(LOG_WRN, true, fmt, args);
+    return _log_alt(LOG_WRN, true, fmt, args);
 }
 int log_inf_isr(const char *fmt, ...)
 {
     va_list args;
     va_start(args, fmt);
     va_end(args);
-    return _log(LOG_INF, true, fmt, args);
+    return _log_alt(LOG_INF, true, fmt, args);
 }
 int log_dbg_isr(const char *fmt, ...)
 {
     va_list args;
     va_start(args, fmt);
     va_end(args);
-    return _log(LOG_DBG, true, fmt, args);
+    return _log_alt(LOG_DBG, true, fmt, args);
 }
 TaskHandle_t logger_task_handle()
 {
@@ -153,7 +176,6 @@ int _log(log_level_t level, bool isr, const char *fmt, va_list args)
     {
         return -1;
     }
-
 #if SHOW_PENDING_LOG_NUM
     UBaseType_t num_messages = uxQueueMessagesWaiting(log_queue);
     Serial.print("Pending Queue: ");
@@ -182,22 +204,26 @@ int _log(log_level_t level, bool isr, const char *fmt, va_list args)
     xSemaphoreGive(log_mutex);
 
     struct log_message msg;
-    char buf[MAX_LOG_LEN];
+    msg.msg_type = LOG_TYPE_DATA;
+    char *buf = (char *)pvPortMalloc(MAX_LOG_LEN * sizeof(char));
+    if (buf == NULL) {
+        return -1;
+    }
     int ret;
     int bytes_left;
     int bytes_written;
     int offset = 0;
 
-    msg.ts = millis();
-    msg.start = true;
-    msg.end = false;
-    msg.level = level;
+    msg.data.ts = millis();
+    msg.data.start = true;
+    msg.data.end = false;
+    msg.data.level = level;
 
 #if (configUSE_TRACE_FACILITY == 1)
     // Get calling task name
     TaskStatus_t xTaskDetails;
     vTaskGetInfo(NULL, &xTaskDetails, pdFALSE, eReady);
-    snprintf(msg.task_name, MAX_TASK_NAME_LEN, "%s", xTaskDetails.pcTaskName);
+    snprintf(msg.data.task_name, MAX_TASK_NAME_LEN, "%s", xTaskDetails.pcTaskName);
 #endif
 
     bytes_left = vsnprintf(buf, MAX_LOG_LEN, fmt, args);
@@ -211,6 +237,7 @@ int _log(log_level_t level, bool isr, const char *fmt, va_list args)
 
         if (xSemaphoreTake(log_mutex, 0) != pdTRUE)
         {
+            vPortFree(buf);
             return -1;
         }
     }
@@ -218,19 +245,20 @@ int _log(log_level_t level, bool isr, const char *fmt, va_list args)
     {
         if (xSemaphoreTake(log_mutex, MS_TO_TICKS(MUTEX_DELAY)) != pdTRUE)
         {
+            vPortFree(buf);
             return -1;
         }
     }
     while (offset < bytes_left)
     {
-        bytes_written = snprintf(msg.buf, MAX_LOG_CHUNK_LEN, "%s", &buf[offset]);
+        bytes_written = snprintf(msg.data.buf, MAX_LOG_CHUNK_LEN, "%s", &buf[offset]);
         if (bytes_written >= MAX_LOG_CHUNK_LEN)
         {
             bytes_written = MAX_LOG_CHUNK_LEN - 1;
         }
         else
         {
-            msg.end = true;
+            msg.data.end = true;
         }
         offset += bytes_written;
 
@@ -250,12 +278,226 @@ int _log(log_level_t level, bool isr, const char *fmt, va_list args)
             break;
         }
 
-        msg.start = false;
+        msg.data.start = false;
+    }
+    vPortFree(buf);
+    xSemaphoreGive(log_mutex);
+    return 0;
+}
+int _log_alt(log_level_t level, bool isr, const char *fmt, va_list args)
+{
+    if (log_queue == NULL)
+    {
+        return -1;
+    }
+    if (log_mutex == NULL)
+    {
+        return -1;
+    }
+#if SHOW_PENDING_LOG_NUM
+    UBaseType_t num_messages = uxQueueMessagesWaiting(log_queue);
+    Serial.print("Pending Queue: ");
+    Serial.println((int)num_messages);
+#endif
+    if (isr)
+    {
+
+        if (xSemaphoreTake(log_mutex, 0) != pdTRUE)
+        {
+            return -1;
+        }
+    }
+    else
+    {
+        if (xSemaphoreTake(log_mutex, MS_TO_TICKS(MUTEX_DELAY)) != pdTRUE)
+        {
+            return -1;
+        }
+    }
+    if (level > log_level)
+    {
+        xSemaphoreGive(log_mutex);
+        return 0;
+    }
+    xSemaphoreGive(log_mutex);
+
+    struct log_message msg;
+    msg.msg_type = LOG_TYPE_DATA_ALT;
+    msg.data_alt.buf = (char *)pvPortMalloc(MAX_LOG_LEN * sizeof(char));
+    if (msg.data_alt.buf == NULL) {
+        return -1;
+    }
+    msg.data_alt.ts = millis();
+    msg.data_alt.level = level;
+
+    int ret;
+    vsnprintf(msg.data_alt.buf, MAX_LOG_LEN, fmt, args);
+
+    // Push to message queue
+    if (isr)
+    {
+        if (xSemaphoreTake(log_mutex, 0) != pdTRUE)
+        {
+            vPortFree(msg.data_alt.buf);
+            return -1;
+        }
+        ret = xQueueSendFromISR(log_queue, (void *)&msg, NULL);
+    }
+    else
+    {
+        if (xSemaphoreTake(log_mutex, MS_TO_TICKS(MUTEX_DELAY)) != pdTRUE)
+        {
+            vPortFree(msg.data_alt.buf);
+            return -1;
+        }
+        ret = xQueueSend(log_queue, (void *)&msg, (TickType_t)0);
+    }
+    
+    if (ret == errQUEUE_FULL)
+    {
+        dropped_messages++;
     }
     xSemaphoreGive(log_mutex);
     return 0;
 }
+static int log_request(log_level_t level, bool isr, const char *fmt, va_list args)
+{
+    if (log_queue == NULL)
+    {
+        return -1;
+    }
+    if (log_mutex == NULL)
+    {
+        return -1;
+    }
 
+    int ret;
+    uint32_t ts = millis();
+    if (isr)
+    {
+
+        if (xSemaphoreTake(log_mutex, 0) != pdTRUE)
+        {
+            return -1;
+        }
+    }
+    else
+    {
+        if (xSemaphoreTake(log_mutex, MS_TO_TICKS(MUTEX_DELAY)) != pdTRUE)
+        {
+            return -1;
+        }
+    }
+    if (level > log_level)
+    {
+        xSemaphoreGive(log_mutex);
+        return 0;
+    }
+    xSemaphoreGive(log_mutex);
+
+    struct log_message msg;
+    msg.msg_type = LOG_TYPE_REQ;
+    msg.req.ts = ts;
+    msg.req.level = level; 
+    msg.req.fmt = fmt;
+    msg.req.args = args;
+
+    // Push to message queue
+    if (isr)
+    {
+        ret = xQueueSendFromISR(log_queue, (void *)&msg, NULL);
+    }
+    else
+    {
+        ret = xQueueSend(log_queue, (void *)&msg, (TickType_t)0);
+    }
+    return (ret == pdTRUE) ? 0 : -1;
+}
+static int handle_log_data(struct log_data *data, char *scratch_buf)
+{
+    if (data == NULL) {
+        return -1;
+    }
+    if (data->start)
+    {
+        if (xSemaphoreTake(log_mutex, portMAX_DELAY) == pdTRUE)
+        {
+            if (dropped_messages > 0)
+            {
+                int cnt = dropped_messages;
+                dropped_messages = 0;
+                xSemaphoreGive(log_mutex);
+                snprintf(scratch_buf, SCRATCH_BUF_SIZE, "---- %d Messages Dropped ----\n", cnt);
+                Serial.write(scratch_buf);
+            }
+            else 
+            {
+                xSemaphoreGive(log_mutex);
+            }
+        }
+
+        uint32_t s, ms;
+        s = data->ts / 1000;
+        ms = data->ts % 1000;
+
+        snprintf(scratch_buf, SCRATCH_BUF_SIZE, "[%06d:%03d] <%s>", s, ms, LOG_LEVEL_NAMES[data->level]);
+        Serial.write(scratch_buf);
+
+#if (configUSE_TRACE_FACILITY == 1)
+        snprintf(scratch_buf, SCRATCH_BUF_SIZE, " %s: ", msg.task_name);
+        Serial.write(scratch_buf);
+#else
+        Serial.write(": ");
+#endif
+
+        Serial.write(data->buf);
+    }
+    else
+    {
+        Serial.write(data->buf);
+    }
+
+    if (data->end)
+    {
+        Serial.write("\n");
+    }
+    return 0;
+}
+static int handle_log_data_alt(struct log_data_alt *data, char *scratch_buf)
+{
+    if (data == NULL) {
+        return -1;
+    }
+    if (xSemaphoreTake(log_mutex, portMAX_DELAY) == pdTRUE)
+    {
+        if (dropped_messages > 0)
+        {
+            int cnt = dropped_messages;
+            dropped_messages = 0;
+            xSemaphoreGive(log_mutex);
+            snprintf(scratch_buf, SCRATCH_BUF_SIZE, "---- %d Messages Dropped ----\n", cnt);
+            Serial.write(scratch_buf);
+        }
+        else 
+        {
+            xSemaphoreGive(log_mutex);
+        }
+    }
+
+    uint32_t s, ms;
+    s = data->ts / 1000;
+    ms = data->ts % 1000;
+
+    snprintf(scratch_buf, SCRATCH_BUF_SIZE, "[%06d:%03d] <%s>", s, ms, LOG_LEVEL_NAMES[data->level]);
+    Serial.write(scratch_buf);
+    Serial.write(": ");
+    Serial.write(data->buf);
+    Serial.write("\n");
+
+    vPortFree(data->buf);
+    data->buf = NULL;
+    return 0;
+}
 static void logger_task(void *pvParameters)
 {
     if (log_queue == NULL)
@@ -274,49 +516,23 @@ static void logger_task(void *pvParameters)
     while (1)
     {
         xQueueReceive(log_queue, &msg, portMAX_DELAY);
-
-        if (msg.start)
-        {
-            if (xSemaphoreTake(log_mutex, portMAX_DELAY) == pdTRUE)
-            {
-                if (dropped_messages > 0)
-                {
-                    int cnt = dropped_messages;
-                    dropped_messages = 0;
-                    xSemaphoreGive(log_mutex);
-                    snprintf(scratch_buf, SCRATCH_BUF_SIZE, "---- %d Messages Dropped ----\n", cnt);
-                    Serial.write(scratch_buf);
-                }
-                else 
-                {
-                    xSemaphoreGive(log_mutex);
-                }
+        switch (msg.msg_type) {
+            case LOG_TYPE_REQ: {
+                _log(msg.req.level, false, msg.req.fmt, msg.req.args);
+                break;
             }
-
-            uint32_t s, ms;
-            s = msg.ts / 1000;
-            ms = msg.ts % 1000;
-
-            snprintf(scratch_buf, SCRATCH_BUF_SIZE, "[%06d:%03d] <%s>", s, ms, LOG_LEVEL_NAMES[msg.level]);
-            Serial.write(scratch_buf);
-
-#if (configUSE_TRACE_FACILITY == 1)
-            snprintf(scratch_buf, SCRATCH_BUF_SIZE, " %s: ", msg.task_name);
-            Serial.write(scratch_buf);
-#else
-            Serial.write(": ");
-#endif
-
-            Serial.write(msg.buf);
-        }
-        else
-        {
-            Serial.write(msg.buf);
-        }
-
-        if (msg.end)
-        {
-            Serial.write("\n");
+            case LOG_TYPE_DATA: {
+                handle_log_data(&msg.data, scratch_buf);
+                break;
+            }
+            case LOG_TYPE_DATA_ALT: {
+                handle_log_data_alt(&msg.data_alt, scratch_buf);
+                break;
+            }
+            default: {
+                Serial.println("Error: Invalid log message type");
+                break;
+            }
         }
     }
 }
