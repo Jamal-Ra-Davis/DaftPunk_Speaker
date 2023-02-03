@@ -21,6 +21,7 @@
 #include "src/Logging.h"
 #include "src/Font.h"
 #include "src/Volume.h"
+#include "src/rgb_manager.h"
 
 #define I2C_BUS_SCAN_MAX 16
 #define TIMER_TASK_STACK_SIZE 2560
@@ -29,13 +30,11 @@
 
 // Global Variables
 BluetoothA2DPSink a2dp_sink;
-CRGBArray<1> rgb_led;
 Adafruit_MAX17048 maxlipo;
-bool display_stack_wm = false;
+bool display_stack_wm = true;
 
 // Function prototypes
 void snake_animation(void *ctx);
-void rgb_led_cycle(void *ctx);
 
 void timer_thread_task(void *pvParameters);
 
@@ -81,30 +80,12 @@ static void chg_stat_isr()
 static void charge_start_action(void *ctx)
 {
   log_inf("Charging started");
-  start_busy = true;
-  for (int i=0; i<10; i++) {
-    rgb_led[0] = CRGB::Black;
-    FastLED.show();
-    delay(50);
-    rgb_led[0] = CRGB::Green;
-    FastLED.show();
-    delay(50);
-  }
-  start_busy = false;
+  oneshot_blink(10, 100, 0, 128, 32);
 }
 static void charge_stop_action(void *ctx)
 {
   log_inf("Charging stopped");
-  stop_busy = true;
-  for (int i=0; i<10; i++) {
-    rgb_led[0] = CRGB::Black;
-    FastLED.show();
-    delay(50);
-    rgb_led[0] = CRGB::Red;
-    FastLED.show();
-    delay(50);
-  }
-  stop_busy = false;
+  oneshot_blink(10, 100, 128, 16, 16);
 }
 
 void setup() {
@@ -150,9 +131,13 @@ void setup() {
     init_success = false;
   }
 
-
   if (init_buttons() < 0) {
     Serial.println("Error: Failed to init button handlers");
+    init_success = false;
+  }
+
+  if (init_rgb_manager() < 0) {
+    Serial.println("Error: Failed to init RGB manager");
     init_success = false;
   }
 
@@ -163,9 +148,6 @@ void setup() {
     delay(250);
   }
 
-  FastLED.addLeds<NEOPIXEL,RGB_LED_DATA>(rgb_led, 1);
-  rgb_led[0] = CRGB::Blue;
-  FastLED.show();
 
   uint8_t i2c_devices[I2C_BUS_SCAN_MAX];
   uint8_t i2c_device_cnt = 0;
@@ -288,21 +270,6 @@ void snake_animation(void *ctx)
 
   double_buffer.update();
 }
-void rgb_led_cycle(void *ctx)
-{
-  CRGB temp = rgb_led[0];
-  rgb_led[0] = CRGB::Black;
-  if (temp.r == 0xFF) {
-    rgb_led[0].g = 0xFF;
-  }
-  else if (temp.g == 0xFF) {
-    rgb_led[0].b = 0xFF;
-  }
-  else if (temp.b == 0xFF) {
-    rgb_led[0].r = 0xFF;
-  }
-  FastLED.show();
-}
 
 void timer_thread_task(void *pvParameters)
 {
@@ -337,12 +304,14 @@ void timer_thread_task(void *pvParameters)
       TaskHandle_t event_task = event_task_handle();
       TaskHandle_t logger_task = logger_task_handle();
       TaskHandle_t cli_task = cli_task_handle();
+      TaskHandle_t rgb_task = rgb_manager_task_handle();
       UBaseType_t fft_task_wm = uxTaskGetStackHighWaterMark(fft_task);
       UBaseType_t display_task_wm = uxTaskGetStackHighWaterMark(display_task);
       UBaseType_t event_task_wm = uxTaskGetStackHighWaterMark(event_task);
       UBaseType_t logger_task_wm = uxTaskGetStackHighWaterMark(logger_task);
       UBaseType_t cli_task_wm = uxTaskGetStackHighWaterMark(cli_task);
       UBaseType_t stack_task_wm = uxTaskGetStackHighWaterMark(NULL);
+      UBaseType_t rgb_task_wm = uxTaskGetStackHighWaterMark(rgb_task);
       volatile size_t xFreeStackSpace = xPortGetFreeHeapSize();
 
       log_inf("fft_task watermark: %d", (int)fft_task_wm);
@@ -351,10 +320,11 @@ void timer_thread_task(void *pvParameters)
       log_inf("logger_task watermark: %d", (int)logger_task_wm);
       log_inf("cli_task watermark: %d", (int)cli_task_wm);
       log_inf("stack_task watermark: %d", (int)stack_task_wm);
+      log_inf("rgb_task watermark: %d", (int)rgb_task_wm);
       log_inf("Free Heap Size = %d\n", xFreeStackSpace);
     }
 
-    rgb_led_cycle(NULL);
+    cnt++;
     delay(1000);
   }
 }
