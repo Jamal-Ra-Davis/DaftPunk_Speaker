@@ -9,6 +9,7 @@
 #define TOTAL_TIME 0.0464399
 #define MAX_FFT_MAG 2000000.0
 #define FFT_BUCKETS 40
+#define PRINT_DELTA false
 
 // TODO: Investigate why audio stream stops sometimes. Check if it's due to FFT processing/display
 
@@ -222,7 +223,9 @@ void process_fft()
     double_buffer.update();
     cnt++;
     int32_t delta = millis() - start_time;
-    log_inf("Delta: %d", delta);
+    if (PRINT_DELTA) {
+        log_inf("Delta: %d", delta);
+    }
 }
 
 void update_freq_array(float *freq_data, int N, float freq, float mag)
