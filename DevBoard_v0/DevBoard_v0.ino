@@ -52,12 +52,18 @@ static volatile bool pair_press = false;
 
 static void select_action(void *ctx)
 {
-  log_inf("Select button pressed");
+  log_inf("Select button pressed - Create a2dp sink");
+  log_inf("Creating a2dp sink...");
+  a2dp_sink.start("DevBoard_v0");
+  volume_init();
+  a2dp_sink.set_stream_reader(read_data_stream);
 }
 static void pair_action(void *ctx)
 {
   pair_press = true;
-  log_inf("Pair Button Pressed");
+  log_inf("Pair Button Pressed - Destroy a2dp sink");
+  log_inf("Destroying a2dp sink...");
+  a2dp_sink.end(false);
 }
 
 volatile int start_cnt = 0;
@@ -148,6 +154,20 @@ void setup() {
     delay(250);
   }
 
+  int test_str_len = get_str_width("DEVBOARD_V0");
+  for (int i=FRAME_BUF_COLS; i >= -test_str_len; i--) {
+    double_buffer.clear();
+    draw_str("DEVBOARD_V0", i, 2, &double_buffer);
+    double_buffer.update();
+    delay(20);
+  }
+  test_str_len = get_str_width("HI! \"BYE\", '(NO)' 3 * 3 + 5 = 11. printf(); ^/\\+-%#");
+  for (int i=FRAME_BUF_COLS; i >= -test_str_len; i--) {
+    double_buffer.clear();
+    draw_str("HI! \"BYE\", '(NO)' 3 * 3 + 5 = 11. printf(); ^/\\+-%#", i, 2, &double_buffer);
+    double_buffer.update();
+    delay(30);
+  }
 
   uint8_t i2c_devices[I2C_BUS_SCAN_MAX];
   uint8_t i2c_device_cnt = 0;
