@@ -4,8 +4,10 @@
 #include "Logging.h"
 #include "I2C_Helper.h"
 #include "Volume.h"
+#include "rgb_manager.h"
 #include <SimpleCLI.h>
 #include <Adafruit_MAX1704X.h>
+#include <BluetoothA2DPSink.h>
 
 #define CLI_TASK_STACK_SIZE 3072
 
@@ -28,7 +30,10 @@ enum CLI_COMMANDS {
     BATT_GET_ALERT_CMD,
     BATT_SET_ALERT_CMD,
     RGB_LED_SET_CMD,
+    RGB_LED_SET_MODE_CMD,
     LOG_LEVEL_SET_CMD,
+    LOG_LEVEL_GET_CMD,
+    CONNECTION_STATUS_CMD,
     NUM_CLI_COMMANDS,
 };
 
@@ -41,6 +46,7 @@ static Command cmdStackDisplay;
 extern bool display_stack_wm;
 extern Adafruit_MAX17048 maxlipo;
 extern int8_t volume_level;
+extern BluetoothA2DPSink a2dp_sink;
 static Command cmd_list[NUM_CLI_COMMANDS];
 
 // Function Prototypes
@@ -64,7 +70,12 @@ static void vol_get_cb(cmd* c);
 static void batt_get_status_cb(cmd* c);
 static void batt_get_alert_cb(cmd* c);
 static void batt_set_alert_cb(cmd* c);
+static void rgb_led_set_mode_cb(cmd* c);
 static void rgb_led_set_cb(cmd* c);
+static void log_level_set_cb(cmd* c);
+static void log_level_get_cb(cmd* c);
+static void a2dp_connected_cb(cmd* c);
+
 static int parse_integer_param(const char *param, int len, int32_t *out);
 static int parse_integer_arg(Argument *arg, int32_t *out);
 static int buf_to_hex_string(uint8_t *buf, uint8_t buf_len, char *str_buf, uint8_t str_buf_len);
@@ -176,10 +187,30 @@ int init_cli_task()
     cmd_list[BATT_SET_ALERT_CMD].addPositionalArgument("ALRT");
     cmd_list[BATT_SET_ALERT_CMD].setDescription("\tSets battery alerts");
 
-    // RGB LED control (switch between manual control and FW)
+    // RGB LED mode control
+    cmd_list[RGB_LED_SET_MODE_CMD] = cli.addCmd("rgb_led_set_mode", rgb_led_set_mode_cb);
+    cmd_list[RGB_LED_SET_MODE_CMD].addPositionalArgument("MODE");
+    cmd_list[RGB_LED_SET_MODE_CMD].setDescription("\tSets LED manager mode\n\t0: Manual\n\t1: Cycle\n\t2: Low Batt\n\t3: Blink N");
+    
+    // Set RGB LED values
     cmd_list[RGB_LED_SET_CMD] = cli.addCmd("rgb_led_set", rgb_led_set_cb);
-    cmd_list[RGB_LED_SET_CMD].addPositionalArgument("MODE");
-    cmd_list[RGB_LED_SET_CMD].setDescription("\tSets LED mode and control");
+    cmd_list[RGB_LED_SET_CMD].addPositionalArgument("R");
+    cmd_list[RGB_LED_SET_CMD].addPositionalArgument("G");
+    cmd_list[RGB_LED_SET_CMD].addPositionalArgument("B");
+    cmd_list[RGB_LED_SET_CMD].setDescription("\tSets LED values");
+
+    // Set Log Level
+    cmd_list[LOG_LEVEL_SET_CMD] = cli.addCmd("log_level_set", log_level_set_cb);
+    cmd_list[LOG_LEVEL_SET_CMD].addPositionalArgument("LOG_LEVEL");
+    cmd_list[LOG_LEVEL_SET_CMD].setDescription("\tSets logging level displayed\n\t0: LOG_ERR\n\t1: LOG_WRN\n\t2: LOG_INF\n\t3: LOG_DBG");
+
+    // Get Log Level
+    cmd_list[LOG_LEVEL_GET_CMD] = cli.addCmd("log_level_get", log_level_get_cb);
+    cmd_list[LOG_LEVEL_GET_CMD].setDescription("\tGets logging level displayed");
+
+    // Get Connection Status
+    cmd_list[CONNECTION_STATUS_CMD] = cli.addCmd("a2dp_connected", a2dp_connected_cb);
+    cmd_list[CONNECTION_STATUS_CMD].setDescription("\tReturns whether bluetooth connection is esablished");
 
     cli.setOnError(error_cb);
 
@@ -536,11 +567,120 @@ static void batt_set_alert_cb(cmd* c)
 {
     log_inf("batt_set_alert");
 }
+static void rgb_led_set_mode_cb(cmd* c)
+{
+    log_inf("rgb_led_set_mode");
+    Command cmd(c);
+    bool valid_inputs = true;
+
+    // Mode
+    Argument mode_arg = cmd.getArgument("MODE");
+    int32_t mode_val;
+
+    if (parse_integer_arg(&mode_arg, &mode_val) < 0) {
+        log_err("Failed to parse mode value");
+        return;
+    }
+    if (mode_val < 0 || mode_val >= NUM_RGB_STATES) {
+        log_err("Invalid RGB mode: %d", mode_val);
+        return;
+    }
+
+    if (mode_val == BLINK_N) {
+        static const int blink_cnt = 5;
+        static const int blink_period = 100;
+        if (oneshot_blink(blink_cnt, blink_period, 0, 0, 100) < 0) {
+            log_err("Failed to perform oneshot_blink");
+            return;
+        }
+    }
+    if (set_rgb_state((rgb_states_t)mode_val) < 0) {
+        log_err("Failed to set RGB state");
+        return;
+    }
+}
 static void rgb_led_set_cb(cmd* c)
 {
     log_inf("rgb_led_set");
-}
+    Command cmd(c);
+    bool valid_inputs = true;
 
+    // Red value
+    Argument r_arg = cmd.getArgument("R");
+    int32_t r_val;
+
+    // Green value
+    Argument g_arg = cmd.getArgument("G");
+    int32_t g_val;
+
+    // Blue value
+    Argument b_arg = cmd.getArgument("B");
+    int32_t b_val;
+
+    if (parse_integer_arg(&r_arg, &r_val) < 0) {
+        log_err("Failed to parse red value");
+        valid_inputs = false;
+    }
+    if (parse_integer_arg(&g_arg, &g_val) < 0) {
+        log_err("Failed to parse green value");
+        valid_inputs = false;
+    }
+    if (parse_integer_arg(&b_arg, &b_val) < 0) {
+        log_err("Failed to parse blue value");
+        valid_inputs = false;
+    }
+    if (r_val < 0 || r_val > 255) {
+        log_err("Input must be in range 0 to 255");
+        valid_inputs = false;
+    }
+    if (g_val < 0 || g_val > 255) {
+        log_err("Input must be in range 0 to 255");
+        valid_inputs = false;
+    }
+    if (b_val < 0 || b_val > 255) {
+        log_err("Input must be in range 0 to 255");
+        valid_inputs = false;
+    }
+
+    if (!valid_inputs) {
+        return;
+    }
+
+    set_rgb_led((uint8_t)r_val, (uint8_t)g_val, (uint8_t)b_val);
+}
+static void log_level_set_cb(cmd* c)
+{
+    log_inf("log_level_set");
+    Command cmd(c);
+
+    // Log Level
+    Argument level_arg = cmd.getArgument("LOG_LEVEL");
+    int32_t level_val;
+
+    if (parse_integer_arg(&level_arg, &level_val) < 0) {
+        log_err("Failed to parse mode value");
+        return;
+    }
+    if (level_val < 0 || level_val >= NUM_LOG_LEVELS) {
+        log_err("Invalid log level mode: %d", level_val);
+        return;
+    }
+    if (set_log_level((log_level_t)level_val) < 0) {
+        log_err("Failed to set log level: %d", level_val);
+        return;
+    }
+}
+static void log_level_get_cb(cmd* c)
+{
+    log_inf("log_level_get");
+    log_level_t level = get_log_level();
+    log_inf("Log Level: %s [%d]", get_log_level_name(level), level);
+}
+static void a2dp_connected_cb(cmd* c)
+{
+    log_inf("a2dp_connected");
+    log_inf("Audio Connected: %d", a2dp_sink.is_connected());
+}
 
 static int parse_integer_param(const char *param, int len, int32_t *out)
 {

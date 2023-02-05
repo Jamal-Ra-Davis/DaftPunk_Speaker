@@ -103,6 +103,14 @@ int set_log_level(log_level_t level)
     xSemaphoreGive(log_mutex);
     return 0;
 }
+log_level_t get_log_level()
+{
+    return log_level;
+}
+const char *get_log_level_name(log_level_t level)
+{
+    return LOG_LEVEL_NAMES[level];
+}
 
 int log_err(const char *fmt, ...)
 {

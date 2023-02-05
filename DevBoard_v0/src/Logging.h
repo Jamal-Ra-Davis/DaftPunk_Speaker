@@ -4,6 +4,8 @@
 typedef enum {LOG_ERR, LOG_WRN, LOG_INF, LOG_DBG, NUM_LOG_LEVELS} log_level_t;
 int init_logger();
 int set_log_level(log_level_t level);
+log_level_t get_log_level();
+const char *get_log_level_name(log_level_t level);
 int log_err(const char* fmt, ...);
 int log_wrn(const char* fmt, ...);
 int log_inf(const char* fmt, ...);
