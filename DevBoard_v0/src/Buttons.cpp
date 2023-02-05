@@ -5,18 +5,9 @@
 #include "Events.h"
 #include "Logging.h"
 
-//extern BluetoothA2DPSink a2dp_sink;
-
 #define VOL_TIMER_PERIOD 500
 #define SHORT_PRESS_PERIOD 250
 #define DEBOUNCE_PERIOD 50
-
-/*
-static const uint8_t MAX_VOLUME_LEVEL = 8;
-static const uint8_t VOLUME_SCALE = 16;
-static int8_t volume_level = 4;
-static volatile bool pair_press = false;
-*/
 
 static void volume_p_button_handler();
 static void volume_m_button_handler();
