@@ -428,7 +428,7 @@ static void mem_read_cb(cmd* c)
     }
 
     int32_t mem_val = *((int32_t*)addr_val);
-    log_inf("MEM[0x%08X] = 0x%08X (%d)", mem_val, mem_val);
+    log_inf("MEM[0x%08X] = 0x%08X (%d)", addr_val, mem_val, mem_val);
 }
 static void mem_write_cb(cmd* c)
 {

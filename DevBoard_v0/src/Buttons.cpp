@@ -28,7 +28,7 @@ struct volume_button_data
 };
 
 struct volume_button_data vol_data[NUM_VOLUME_KEYS];
-static char *timer_names[NUM_VOLUME_KEYS] = {"Timer_vol_p", "Timer_vol_m"};
+static const char *timer_names[NUM_VOLUME_KEYS] = {"Timer_vol_p", "Timer_vol_m"};
 
 static void volume_timer_func(TimerHandle_t xTimer);
 
@@ -38,7 +38,7 @@ int init_buttons()
   pinMode(VOL_M_PIN, INPUT);
   pinMode(PAIR_PIN, INPUT);
 
-  vol_data[VOLUME_PLUS].timer = xTimerCreate("Timer_vol_p", MS_TO_TICKS(VOL_TIMER_PERIOD), pdFALSE, (void *)VOLUME_PLUS, volume_timer_func);
+  vol_data[VOLUME_PLUS].timer = xTimerCreate(timer_names[VOLUME_PLUS], MS_TO_TICKS(VOL_TIMER_PERIOD), pdFALSE, (void *)VOLUME_PLUS, volume_timer_func);
   vol_data[VOLUME_PLUS].pin = VOL_P_PIN;
   if (vol_data[VOLUME_PLUS].timer == NULL)
   {
@@ -46,7 +46,7 @@ int init_buttons()
     return -1;
   }
 
-  vol_data[VOLUME_MINUS].timer = xTimerCreate("Timer_vol_m", MS_TO_TICKS(VOL_TIMER_PERIOD), pdFALSE, (void *)VOLUME_MINUS, volume_timer_func);
+  vol_data[VOLUME_MINUS].timer = xTimerCreate(timer_names[VOLUME_MINUS], MS_TO_TICKS(VOL_TIMER_PERIOD), pdFALSE, (void *)VOLUME_MINUS, volume_timer_func);
   vol_data[VOLUME_MINUS].pin = VOL_M_PIN;
   if (vol_data[VOLUME_MINUS].timer == NULL)
   {

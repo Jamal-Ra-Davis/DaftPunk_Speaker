@@ -456,7 +456,6 @@ static inline int char_to_idx(char c)
         return (int)((c - ':' + SPECIAL1_OFFSET)*FONT_HEIGHT);
     }
     if (c >= '[' && c <= '_') {
-        log_err("Special 1: %c", c);
         return (int)((c - '[' + SPECIAL2_OFFSET)*FONT_HEIGHT);
     }
 
