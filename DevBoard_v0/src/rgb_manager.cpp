@@ -116,7 +116,7 @@ static void led_low_battery()
         increasing = true;
     }
     else if (brightness == 0xFF) {
-        increasing == false;
+        increasing = false;
     }
 
     if (increasing) {
@@ -127,7 +127,7 @@ static void led_low_battery()
     }
 
     set_rgb_led(brightness, 0, 0);
-    delay(100);
+    delay(25);
 }
 static void _oneshot_blink()
 {
