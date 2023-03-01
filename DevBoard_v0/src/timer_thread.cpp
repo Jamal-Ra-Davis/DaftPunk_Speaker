@@ -9,17 +9,29 @@ struct timer_thread{
     void *ctx;
 };
 
+static bool init_complete = false;
 static int thread_cnt = 0;
 static struct timer_thread threads[NUM_TIMER_THREADS];
 
-static bool check_timer(struct timer_thread *thread, uint32_t ts) {
-  if (ts - thread->ts >= thread->period) {
-    thread->ts = ts;
-    return true;
-  }
-  return false;
+static bool check_timer(struct timer_thread *thread, uint32_t ts) 
+{
+    if (ts - thread->ts >= thread->period) {
+        thread->ts = ts;
+        return true;
+    }
+    return false;
 }
 
+int init_timer_thread_manager()
+{
+    for (int i=0; i<NUM_TIMER_THREADS; i++) {
+        threads[i].active = false;
+        threads[i].func = NULL;
+        threads[i].ctx = NULL;
+    }
+    init_complete = true;
+    return 0;
+}
 int register_timer_thread(timer_thread_func_t func, void *ctx, uint32_t period)
 {
     if (thread_cnt >= NUM_TIMER_THREADS) {
@@ -36,8 +48,11 @@ int register_timer_thread(timer_thread_func_t func, void *ctx, uint32_t period)
 }
 void update_timer_threads()
 {
+    if (!init_complete) {
+        return;
+    }
     uint32_t ts = micros();
-    for (int i=0; i<NUM_TIMER_THREADS; i++) {
+    for (int i=0; i<thread_cnt; i++) {
         if (!threads[i].active) {
             continue;
         }
