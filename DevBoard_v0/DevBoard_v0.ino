@@ -32,9 +32,11 @@
 BluetoothA2DPSink a2dp_sink;
 Adafruit_MAX17048 maxlipo;
 bool display_stack_wm = true;
+bool idle = true;
 
 // Function prototypes
 void snake_animation(void *ctx);
+void stack_display(void *ctx);
 
 void timer_thread_task(void *pvParameters);
 
@@ -161,10 +163,11 @@ void setup() {
     double_buffer.update();
     delay(20);
   }
-  test_str_len = get_str_width("HI! \"BYE\", '(NO)' 3 * 3 + 5 = 11. printf(); ^/\\+-%#");
+  const char *test_str = "HI! \"BYE\", '(NO)' 3*3+5=11. printf(); ^/\\+-%#";
+  test_str_len = get_str_width(test_str);
   for (int i=FRAME_BUF_COLS; i >= -test_str_len; i--) {
     double_buffer.clear();
-    draw_str("HI! \"BYE\", '(NO)' 3 * 3 + 5 = 11. printf(); ^/\\+-%#", i, 2, &double_buffer);
+    draw_str(test_str, i, 2, &double_buffer);
     double_buffer.update();
     delay(30);
   }
@@ -204,6 +207,20 @@ void setup() {
     init_success = false;
   }
 
+  init_timer_thread_manager();
+  if (register_timer_thread(snake_animation, NULL, MS_TO_US(50)) < 0) {
+    log_err("Failed to register snake_animation timer thread");
+  }
+  else {
+    log_inf("Successfully registered snake_animation timer thread");
+  }
+  if (register_timer_thread(stack_display, NULL, MS_TO_US(1000)) < 0) {
+    log_err("Failed to register stack_display timer thread");
+  }
+  else {
+    log_inf("Successfully registered stack_display timer thread");
+  }
+
   // Create FreeRTOS Tasks
   xTaskCreate(
     timer_thread_task,
@@ -216,7 +233,7 @@ void setup() {
 
   // Init Audio
   a2dp_sink.start("DevBoard_v0");
-  volume_init();
+  //volume_init();
   a2dp_sink.set_stream_reader(read_data_stream);
 
   attachInterrupt(digitalPinToInterrupt(CHG_STAT_PIN), chg_stat_isr, CHANGE);
@@ -232,7 +249,7 @@ void loop() {
 void snake_animation(void *ctx)
 {
   static int prev_dir = 0;
-  double_buffer.clear();
+  
   int dir;
   while (1) {
     dir = rand() % 4;
@@ -282,17 +299,53 @@ void snake_animation(void *ctx)
   for (int i=BODY_LEN-1; i>=1; i--) {
     body[i].x = body[i-1].x;
     body[i].y = body[i-1].y;
-    double_buffer.setPixel(body[i].x, body[i].y);
   }
   body[0].x = x;
   body[0].y = y;
-  double_buffer.setPixel(body[0].x, body[0].y);
 
-  double_buffer.update();
+  if (idle) {
+    double_buffer.clear();
+    for (int i=BODY_LEN-1; i>=0; i--) {
+      double_buffer.setPixel(body[i].x, body[i].y);
+    }
+    double_buffer.update();
+  }
 }
+void stack_display(void *ctx)
+{
+  if (display_stack_wm) {
+      TaskHandle_t fft_task = fft_task_handle();
+      TaskHandle_t display_task = display_task_handle();
+      TaskHandle_t event_task = event_task_handle();
+      TaskHandle_t logger_task = logger_task_handle();
+      TaskHandle_t cli_task = cli_task_handle();
+      TaskHandle_t rgb_task = rgb_manager_task_handle();
+      UBaseType_t fft_task_wm = uxTaskGetStackHighWaterMark(fft_task);
+      UBaseType_t display_task_wm = uxTaskGetStackHighWaterMark(display_task);
+      UBaseType_t event_task_wm = uxTaskGetStackHighWaterMark(event_task);
+      UBaseType_t logger_task_wm = uxTaskGetStackHighWaterMark(logger_task);
+      UBaseType_t cli_task_wm = uxTaskGetStackHighWaterMark(cli_task);
+      UBaseType_t stack_task_wm = uxTaskGetStackHighWaterMark(NULL);
+      UBaseType_t rgb_task_wm = uxTaskGetStackHighWaterMark(rgb_task);
+      volatile size_t xFreeStackSpace = xPortGetFreeHeapSize();
 
+      log_inf("fft_task watermark: %d", (int)fft_task_wm);
+      log_inf("display_task watermark: %d", (int)display_task_wm);
+      log_inf("event_task watermark: %d", (int)event_task_wm);
+      log_inf("logger_task watermark: %d", (int)logger_task_wm);
+      log_inf("cli_task watermark: %d", (int)cli_task_wm);
+      log_inf("stack_task watermark: %d", (int)stack_task_wm);
+      log_inf("rgb_task watermark: %d", (int)rgb_task_wm);
+      log_inf("Free Heap Size = %d\n", xFreeStackSpace);
+    }
+}
 void timer_thread_task(void *pvParameters)
 {
+  while (1) {
+    update_timer_threads();
+    delay(50);
+  }
+  
   static int cnt = 0;
   //update_timer_threads();
   while (1) {
@@ -318,31 +371,6 @@ void timer_thread_task(void *pvParameters)
     double_buffer.update();
     */
 
-    if (display_stack_wm) {
-      TaskHandle_t fft_task = fft_task_handle();
-      TaskHandle_t display_task = display_task_handle();
-      TaskHandle_t event_task = event_task_handle();
-      TaskHandle_t logger_task = logger_task_handle();
-      TaskHandle_t cli_task = cli_task_handle();
-      TaskHandle_t rgb_task = rgb_manager_task_handle();
-      UBaseType_t fft_task_wm = uxTaskGetStackHighWaterMark(fft_task);
-      UBaseType_t display_task_wm = uxTaskGetStackHighWaterMark(display_task);
-      UBaseType_t event_task_wm = uxTaskGetStackHighWaterMark(event_task);
-      UBaseType_t logger_task_wm = uxTaskGetStackHighWaterMark(logger_task);
-      UBaseType_t cli_task_wm = uxTaskGetStackHighWaterMark(cli_task);
-      UBaseType_t stack_task_wm = uxTaskGetStackHighWaterMark(NULL);
-      UBaseType_t rgb_task_wm = uxTaskGetStackHighWaterMark(rgb_task);
-      volatile size_t xFreeStackSpace = xPortGetFreeHeapSize();
-
-      log_inf("fft_task watermark: %d", (int)fft_task_wm);
-      log_inf("display_task watermark: %d", (int)display_task_wm);
-      log_inf("event_task watermark: %d", (int)event_task_wm);
-      log_inf("logger_task watermark: %d", (int)logger_task_wm);
-      log_inf("cli_task watermark: %d", (int)cli_task_wm);
-      log_inf("stack_task watermark: %d", (int)stack_task_wm);
-      log_inf("rgb_task watermark: %d", (int)rgb_task_wm);
-      log_inf("Free Heap Size = %d\n", xFreeStackSpace);
-    }
 
     cnt++;
     delay(1000);

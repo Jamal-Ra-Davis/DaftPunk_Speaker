@@ -33,3 +33,4 @@
 
 // Task Helpers
 #define MS_TO_TICKS(x) (x / portTICK_PERIOD_MS)
+#define MS_TO_US(x) (x*1000)

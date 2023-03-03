@@ -37,6 +37,8 @@ static float fft_input[FFT_N];
 static struct fft_double_buffer fft_buf;
 static fft_config_t *real_fft_plan;
 static TaskHandle_t xfft_task = NULL;
+extern bool idle;
+TimerHandle_t idle_timer;
 
 // Function Prototypes
 static void fft_task(void *pvParameters);
@@ -44,6 +46,7 @@ static void process_fft();
 static void init_fft_buffer(struct fft_double_buffer *fft_buf);
 static inline void swap_fft_buffers(struct fft_double_buffer *fft_buf);
 static void update_freq_array(float *freq_data, int N, float freq, float mag);
+static void idle_timer_func(TimerHandle_t xTimer);
 
 // Public Functions
 int init_fft_task()
@@ -56,6 +59,7 @@ int init_fft_task()
         log_err("Could not allocate data ready semaphore");
         return -1;
     }
+    idle_timer = xTimerCreate("Idle_Timer", MS_TO_TICKS(10000), pdFALSE, NULL, idle_timer_func);
     xTaskCreate(
         fft_task,
         "FFT_Task", // A name just for humans
@@ -207,6 +211,7 @@ void process_fft()
         Serial.println();
     }
 
+    idle = false;
     double_buffer.clear();
     for (int i = 0; i < FFT_BUCKETS; i++)
     {
@@ -225,6 +230,9 @@ void process_fft()
     int32_t delta = millis() - start_time;
     if (PRINT_DELTA) {
         log_inf("Delta: %d", delta);
+    }
+    if (xTimerStart(idle_timer, 0) != pdPASS) {
+        log_err("Failed to start idle timer");
     }
 }
 
@@ -252,4 +260,9 @@ void update_freq_array(float *freq_data, int N, float freq, float mag)
     }
     freq_data[0] = freq;
     freq_data[1] = mag;
+}
+
+static void idle_timer_func(TimerHandle_t xTimer)
+{
+    idle = true;
 }
