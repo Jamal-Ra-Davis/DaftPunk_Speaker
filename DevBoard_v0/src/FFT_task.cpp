@@ -21,6 +21,7 @@ struct fft_double_buffer
     float *fft_write;
     uint32_t widx;
 };
+typedef enum {FFT_LINEAR, FFT_LOG} fft_display_type_t;
 
 // File Globals
 static SemaphoreHandle_t xDataReadySem;
@@ -39,6 +40,7 @@ static fft_config_t *real_fft_plan;
 static TaskHandle_t xfft_task = NULL;
 extern bool idle;
 TimerHandle_t idle_timer;
+static fft_display_type_t fft_display = FFT_LOG;
 
 // Function Prototypes
 static void fft_task(void *pvParameters);
@@ -121,6 +123,47 @@ static inline void swap_fft_buffers(struct fft_double_buffer *fft_buf)
     fft_buf->fft_write = temp;
 }
 
+static inline void draw_fft_linear(float bucket_mags[])
+{
+    double_buffer.clear();
+    for (int i = 0; i < FFT_BUCKETS; i++)
+    {
+        if (bucket_mags[i] > MAX_FFT_MAG)
+        {
+            bucket_mags[i] = MAX_FFT_MAG;
+        }
+        int height = (int)((bucket_mags[i] / MAX_FFT_MAG) * 8);
+        for (int j = 0; j < height; j++)
+        {
+            double_buffer.setPixel(i, j);
+        }
+    }
+    double_buffer.update();
+}
+static inline void draw_fft_logarithmic(float bucket_mags[])
+{
+    static const uint32_t LOG_MIN = 20000;//15265;
+    double_buffer.clear();
+    for (int i = 0; i < FFT_BUCKETS; i++)
+    {
+        uint32_t mag = (uint32_t)bucket_mags[i];        
+        uint8_t height = 0;
+        while (mag > LOG_MIN) {
+            mag = mag >> 1;
+            height++;
+            if (height >= 8) {
+                break;
+            }
+        }
+
+        for (uint8_t j = 0; j < height; j++)
+        {
+            double_buffer.setPixel(i, j);
+        }
+    }
+    double_buffer.update();
+}
+
 static void fft_task(void *pvParameters)
 {
     while (1)
@@ -181,26 +224,10 @@ void process_fft()
         {
             bucket_mags[bidx] = mag;
         }
-
-        if (mag > max_magnitude)
-        {
-            max_magnitude = mag;
-            fundamental_freq = 0;
-            update_freq_array(freq_data, 10, freq, mag);
-        }
-
-        if (freq > ranges[bucket_idx])
-        {
-            bucket_data[2 * bucket_idx] = freq;
-            bucket_data[2 * bucket_idx + 1] = mag;
-            bucket_idx++;
-            bucket_mag = 0;
-            bucket_freq = 0;
-        }
     }
     int32_t end_time = millis();
 
-    if (cnt % 10 == 0 && false)
+    if (true && cnt % 10 == 0)
     {
         Serial.println("Mags:");
         for (int i = 0; i < FFT_BUCKETS; i++)
@@ -212,20 +239,17 @@ void process_fft()
     }
 
     idle = false;
-    double_buffer.clear();
-    for (int i = 0; i < FFT_BUCKETS; i++)
-    {
-        if (bucket_mags[i] > MAX_FFT_MAG)
-        {
-            bucket_mags[i] = MAX_FFT_MAG;
-        }
-        int height = (int)((bucket_mags[i] / MAX_FFT_MAG) * 8);
-        for (int j = 0; j < height; j++)
-        {
-            double_buffer.setPixel(i, j);
-        }
+    switch (fft_display) {
+        case FFT_LINEAR:
+            draw_fft_linear(bucket_mags);
+            break;
+        case FFT_LOG:
+            draw_fft_logarithmic(bucket_mags);
+            break;
+        default:
+            break;
     }
-    double_buffer.update();
+    
     cnt++;
     int32_t delta = millis() - start_time;
     if (PRINT_DELTA) {
